@@ -1,0 +1,22 @@
+rtabmap:
+  ros__parameters:
+    use_sim_time: true
+    frame_id: "base_footprint"
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_scan: false
+    subscribe_scan_cloud: false
+    subscribe_stereo: false
+    subscribe_user_data: false
+
+    # ✅ Enable 3D mapping and color
+    RGBD/CreateRGB: "true"
+    CloudRGB: "true"
+    Grid/3D: "true"
+    RGBD/CreateRGB: "true"
+    CloudRGB: "true"
+
+    # Optional tuning
+    Vis/MinInliers: "10"
+    Mem/STMSize: "30"
+    Reg/Strategy: "0"  # visual-only

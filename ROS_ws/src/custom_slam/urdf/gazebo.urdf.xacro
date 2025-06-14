@@ -1,0 +1,227 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <!-- ROS 2 Control Configuration -->
+  <ros2_control name="GazeboSystem" type="system">
+    <hardware>
+      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+    </hardware>
+    
+    <!-- Joints -->
+    <joint name="middle_wheel_joint_left">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="middle_wheel_joint_right">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="rear_wheel_joint_left">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="rear_wheel_joint_right">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="front_wheel_joint_left">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="front_wheel_joint_right">
+      <command_interface name="velocity">
+        <param name="min">-10</param>
+        <param name="max">10</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <!-- Front and Rear Rotating Joints -->
+    <joint name="front_wheel_joint_R">
+      <command_interface name="position">
+        <param name="min">-5</param>
+        <param name="max">5</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-0.1</param>
+        <param name="max">0.1</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="front_wheel_joint_L">
+      <command_interface name="position">
+        <param name="min">-5</param>
+        <param name="max">5</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-0.1</param>
+        <param name="max">0.1</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="rear_wheel_joint_R">
+      <command_interface name="position">
+        <param name="min">-5</param>
+        <param name="max">5</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-0.1</param>
+        <param name="max">0.1</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="rear_wheel_joint_L">
+      <command_interface name="position">
+        <param name="min">-5</param>
+        <param name="max">5</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-0.1</param>
+        <param name="max">0.1</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+  </ros2_control>
+
+  <!-- Gazebo Plugin -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(find custom_slam)/config/controller_velocity.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- IMU Sensor
+  <gazebo reference="imu_link">
+    <gravity>true</gravity>
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>100</update_rate>
+      <visualize>true</visualize>
+      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+        <topicName>imu</topicName>
+        <bodyName>imu_link</bodyName>
+        <updateRateHZ>100.0</updateRateHZ>
+        <gaussianNoise>0.0</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+        <frameName>imu_link</frameName>
+        <initialOrientationAsReference>false</initialOrientationAsReference>
+      </plugin>
+    </sensor>
+  </gazebo> -->
+
+  <!-- LiDAR Sensor
+  <gazebo reference="lidar_link">
+    <sensor type="ray" name="lidar_sensor">
+      <always_on>true</always_on>
+      <pose>0 0 0 0 0 0</pose>
+      <update_rate>20.0</update_rate>
+      <visualize>true</visualize>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14</min_angle>
+            <max_angle>3.14</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.2</min>
+          <max>30.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+    <plugin name="scan" filename="libgazebo_ros_laser.so">
+      <bodyName>scan</bodyName>
+      <topicName>scan</topicName> Topic for publishing scan data
+      <frameName>lidar_link</frameName> Reference frame
+    </plugin>
+    </sensor>
+  </gazebo> -->
+
+  <!-- Camera Sensor -->
+  <gazebo reference="zed_camera_link">
+    <sensor name="zed_camera" type="camera">
+      <visualize>true</visualize>
+      <pose>0.2 0.0 0 0 0 0</pose>  <!-- Position the camera (adjust if needed) -->
+      <camera name="camera">
+        <horizontal_fov>2.09</horizontal_fov>  <!-- Field of view of ZED 2i -->
+        <image>
+          <width>2688</width>  <!-- Camera resolution (set to ZED 2i default) -->
+          <height>1520</height>
+          <format>R8G8B8</format>
+        </image>
+        <depth>
+          <width>1280</width>
+          <height>720</height>
+        </depth>
+        <clip>
+          <near>0.1</near>  <!-- Near clipping distance -->
+          <far>3</far>     <!-- Far clipping distance -->
+        </clip>
+        <update_rate>30.0</update_rate>  <!-- Frame rate of the camera -->
+      </camera>
+      <plugin name="gazebo_ros_camera" filename="libgazebo_ros_camera.so">
+        <frame_name>zed_camera_link</frame_name>  <!-- Link to which the camera is attached -->
+        <alwaysOn>true</alwaysOn>
+        <ros>
+          <remapping>/camera/image_raw:=/zed_camera/image_raw</remapping>  <!-- Remap topics if needed -->
+        </ros>
+        <camera_name>zed_camera</camera_name>
+        <image_topic>/camera/image_raw</image_topic>
+        <depth_topic>/camera/depth_raw</depth_topic>
+        <point_cloud_topic>/camera/point_cloud</point_cloud_topic>  <!-- Optional for depth camera -->
+        <frame_name>zed_camera_link</frame_name>
+        <always_on>true</always_on>
+        <update_rate>30.0</update_rate>  <!-- Camera update rate -->
+      </plugin>
+    </sensor>
+  </gazebo>
+
+
+</robot>

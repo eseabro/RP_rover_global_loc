@@ -5,6 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from launch.actions import SetEnvironmentVariable
 
 import os
 
@@ -25,7 +26,7 @@ def launch_setup(context, *args, **kwargs):
     world = LaunchConfiguration('world').perform(context)
     
     nav2_params_file = PathJoinSubstitution(
-        [FindPackageShare('rtabmap_demos'), 'params', 'turtlebot3_rgbd_nav2_params.yaml']
+        [FindPackageShare('custom_slam'), 'config', 'rgbd_nav2_params.yaml']
     )
 
     # Paths
@@ -44,36 +45,34 @@ def launch_setup(context, *args, **kwargs):
         launch_arguments=[
             ('x_pose', LaunchConfiguration('x_pose')),
             ('y_pose', LaunchConfiguration('y_pose')),
-            ('ros_args', '--log-level error')
         ]
     )
-    nav2 = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([nav2_launch]),
-        launch_arguments=[
-            ('use_sim_time', 'true'),
-            ('params_file', nav2_params_file),
-            ('ros_args', '--log-level error')
-        ]
-    )
-    rviz = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([rviz_launch]),
-        launch_arguments=[
-            ('ros_args', '--log-level error'),
-            ('rviz_config', custom_rviz_config)
-        ]
-    )
+    # nav2 = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource([nav2_launch]),
+    #     launch_arguments=[
+    #         ('use_sim_time', 'true'),
+    #         ('params_file', nav2_params_file),
+    #     ]
+    # )
+    # rviz = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource([rviz_launch]),
+    #     launch_arguments=[
+    #         ('rviz_config', custom_rviz_config)
+    #     ]
+    # )
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([rtabmap_launch]),
         launch_arguments=[
             ('localization', LaunchConfiguration('localization')),
             ('use_sim_time', 'true'),
-            ('ros_args', '--log-level error')
+            ('params_file', nav2_params_file),
+            # ('world', LaunchConfiguration('world')),
         ]
     )
     return [
         # Nodes to launch
-        nav2,
-        rviz,
+        # nav2,
+        # rviz,
         rtabmap,
         gazebo
     ]
@@ -90,12 +89,10 @@ def generate_launch_description():
             executable='bev_mapper_node',
             name='bev_mapper_node',
             output='screen',
+            arguments=['--ros-args', '--log-level', 'custom_slam.bev_mapper_node:=info']
         )
-
+    
     return LaunchDescription([
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource(gazebo_launch_file)
-        # ),
         bev_node,
         # Launch arguments
         DeclareLaunchArgument(

@@ -15,6 +15,14 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
+        (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
+        (os.path.join('share', package_name, 'models', 'marsyard2022'), 
+         glob('models/marsyard2022/*.*')),
+
+        (os.path.join('share', package_name, 'models', 'marsyard2022', 'dem'),
+         glob('models/marsyard2022/dem/*')),
+        (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
+        (os.path.join('share', package_name, 'meshes'), glob('meshes/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,6 +34,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bev_mapper_node = custom_slam.bev_mapper_node:main',
+            'controller_node = custom_slam.controller_node:main',
         ],
     },
 )

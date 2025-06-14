@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="marsyard2022">
+    <pose>0 0 0 0 0 0</pose>
+    <static>true</static>
+
+    <link name="marsyard">
+
+      <collision name="terrain_collision">
+        <geometry>
+          <heightmap>
+            <uri>model://marsyard2022/dem/marsyard2022_terrain_hm.tif</uri>
+            <pos>0 0 0</pos>
+            <size>50 50 4.820803273566</size> 
+          </heightmap>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.5</mu>        <!-- Lateral friction (try 0.5 - 1.0 for normal terrain) -->
+              <mu2>0.5</mu2>        <!-- Second friction direction -->
+            </ode>
+          </friction>
+          <contact>
+            <ode>
+              <kp>100000</kp>
+              <kd>10</kd>
+              <max_vel>0.01</max_vel>
+              <min_depth>0.001</min_depth>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+
+      <visual name="terrain_visual">
+        <geometry>
+          <heightmap>
+            <use_terrain_paging>false</use_terrain_paging>
+            <uri>model://marsyard2022/dem/marsyard2022_terrain_hm.tif</uri>
+            <pos>0 0 0</pos>
+            <size>50 50 4.820803273566</size> 
+            <texture>
+              <diffuse>model://marsyard2022/dem/marsyard2022_terrain_texture.png</diffuse>
+              <size>50</size>
+            </texture>
+          </heightmap>
+        </geometry>
+      </visual>
+
+    </link>
+
+  </model>
+</sdf>
