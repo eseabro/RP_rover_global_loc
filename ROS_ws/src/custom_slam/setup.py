@@ -18,7 +18,6 @@ setup(
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
         (os.path.join('share', package_name, 'models', 'marsyard2022'), 
          glob('models/marsyard2022/*.*')),
-
         (os.path.join('share', package_name, 'models', 'marsyard2022', 'dem'),
          glob('models/marsyard2022/dem/*')),
         (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
@@ -35,6 +34,7 @@ setup(
         'console_scripts': [
             'bev_mapper_node = custom_slam.bev_mapper_node:main',
             'controller_node = custom_slam.controller_node:main',
+            
         ],
     },
 )

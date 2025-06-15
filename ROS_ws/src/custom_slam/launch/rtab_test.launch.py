@@ -1,20 +1,30 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch.actions import TimerAction
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.substitutions import FindPackageShare
-from xacro import process_file  # Make sure `xacro` is installed
 
 import os
 import xacro
+from xacro import process_file
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     x_pose = LaunchConfiguration('x_pose')
     y_pose = LaunchConfiguration('y_pose')
+
+    robot_fname = ['osr_full.urdf.xacro', 'osr.urdf.xacro']
+    robot_version = 0
+
+    rtab_remap=[
+          ('/imu', '/imu_plugin/out'),
+          ('rgb/image', '/color/image_raw'),
+          ('rgb/camera_info', '/color/camera_info'),
+          ('depth/image', '/aligned_depth_to_color/image_raw'),
+          ('odom', 'odom')] 
 
     # Correct paths
     world = os.path.join(
@@ -38,7 +48,8 @@ def generate_launch_description():
             package='custom_slam',
             executable='controller_node',
             name='controller_node',
-            output='screen'
+            output='screen',
+            parameters=[{'use_sim_time': use_sim_time}]
             )
     
     gazebo = IncludeLaunchDescription(
@@ -53,10 +64,10 @@ def generate_launch_description():
     
     xacro_file = os.path.join(get_package_share_directory('custom_slam'),
                               'urdf',
-                              'osr.urdf.xacro')
+                              robot_fname[robot_version])
 
-    doc = xacro.parse(open(xacro_file))
-    xacro.process_doc(doc)
+    robot_description = process_file(xacro_file).toxml()
+
     # robot_description_content = process_file(robot_urdf_path).toxml()
 
     robot_state_publisher_node = Node(
@@ -65,7 +76,7 @@ def generate_launch_description():
         name='robot_state_publisher',
         output='screen',
         parameters=[
-            {'robot_description': doc.toxml()},
+            {'robot_description': robot_description},
             {'use_sim_time': use_sim_time}
         ]
     )
@@ -89,12 +100,23 @@ def generate_launch_description():
         period=5.0,  # seconds, adjust as needed
         actions=[spawn]
     )
-    controller_manager = Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['wheel_controller', '--controller-manager', '/controller_manager'],
-            output='screen',
-        )
+
+    load_joint_state_controller = ExecuteProcess(
+        cmd=['ros2', 'control', 'load_controller', '--set-state', 'active', 'joint_state_broadcaster'],
+        output='screen'
+    )
+
+    # wheel_velocity_controller
+    rover_wheel_controller = ExecuteProcess(
+        cmd=['ros2', 'control', 'load_controller', '--set-state', 'active', 'wheel_controller'],
+        output='screen'
+    )
+
+    # servo_controller
+    servo_controller = ExecuteProcess(
+        cmd=['ros2', 'control', 'load_controller', '--set-state', 'active', 'servo_controller'],
+        output='screen'
+    )
     
     rgbd_sync = Node(
         package='rtabmap_sync',
@@ -102,12 +124,8 @@ def generate_launch_description():
         name='rgbd_sync',
         output='screen',
         parameters=[rtabmap_param_file],
-        remappings=[
-            ('rgb/image', '/camera/color/image_raw'),
-            ('depth/image', '/camera/depth/image_raw'),
-            ('rgb/camera_info', '/camera/color/camera_info'),
-            ('odom', '/odom')
-        ]
+        remappings=rtab_remap
+
     )
 
     rtabmap = Node(
@@ -117,23 +135,15 @@ def generate_launch_description():
         output='screen',
         parameters=[rtabmap_param_file],
         arguments=['-d'],
-        remappings=[
-            ('rgb/image', '/camera/color/image_raw'),
-            ('depth/image', '/camera/depth/image_raw'),
-            ('rgb/camera_info', '/camera/color/camera_info'),
-            ('odom', '/odom')
-        ]
+        remappings=rtab_remap
     )
     viz = Node(
         package='rtabmap_viz',
         executable='rtabmap_viz',
         name='rtabmap_viz',
         output='screen',
-        parameters=[{
-            'frame_id': 'base_footprint',
-            'odom_frame_id': 'odom',
-            'use_sim_time': use_sim_time,
-        }]
+        parameters=[rtabmap_param_file],
+        remappings=rtab_remap
     )
 
     return LaunchDescription([
@@ -145,7 +155,9 @@ def generate_launch_description():
         robot_state_publisher_node,
         spawn_after_gazebo,
         controller,
-        controller_manager,
+        load_joint_state_controller,
+        rover_wheel_controller,
+        servo_controller,
         rgbd_sync,
         rtabmap,
         viz

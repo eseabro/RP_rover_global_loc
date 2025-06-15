@@ -22,6 +22,7 @@
 
     <xacro:include filename="$(find custom_slam)/urdf/gazebo.urdf.xacro"/>
     <xacro:include filename="$(find custom_slam)/urdf/insert_transmission.urdf.xacro"/>
+    <xacro:include filename="$(find custom_slam)/urdf/realsense.xacro"/>
 
     <link name="base_footprint"/>
     <link name="base_link">
@@ -506,31 +507,5 @@
     <xacro:insert_position_transmission name="rear_wheel_joint_R"/>
     <xacro:insert_position_transmission name="rear_wheel_joint_L"/>
 
-    
-  <!-- Camera Link -->
-  <link name="zed_camera_link">
-    <visual>
-      <geometry>
-        <box size="0.1 0.1 0.1"/>  <!-- Adjust the size based on your model -->
-      </geometry>
-      <material name="blue"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="0.1 0.1 0.1"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.1"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-
-  <!-- Camera Joint (if you need it to be movable, like on a pan/tilt setup) -->
-  <joint name="zed_camera_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="zed_camera_link"/>
-    <origin xyz="0.2 0.0 0.0" rpy="0 0 0"/>
-  </joint>
 
 </robot>

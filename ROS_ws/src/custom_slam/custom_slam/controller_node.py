@@ -23,7 +23,7 @@ class OSRController(Node):
         # Publishers
         self.motor_wheel_pub = self.create_publisher(Float64MultiArray, '/wheel_controller/commands', 1)
         self.servo_pub = self.create_publisher(JointTrajectory, '/servo_controller/joint_trajectory', 1)
-        self.odom_pub = self.create_publisher(Odometry, 'osr/odom', 10)
+        self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
         self.br = TransformBroadcaster(self)
 
         # Subscriptions
@@ -41,6 +41,8 @@ class OSRController(Node):
         self.FL_data = self.FR_data = self.ML_data = self.MR_data = self.RL_data = self.RR_data = 0.0
         self.FL_servo_data = self.FR_servo_data = self.RL_servo_data = self.RR_servo_data = 0.0
         self.fl_vel = self.fr_vel = self.ml_vel = self.mr_vel = self.rl_vel = self.rr_vel = 0.0
+        timer_period = 0.05  # seconds (30 Hz)
+        self.timer = self.create_timer(timer_period, self.publish_odometry)
 
     def joint_state_callback(self, msg):
         try:
@@ -54,7 +56,7 @@ class OSRController(Node):
             self.get_logger().warn(f"JointState missing expected joint names or velocities: {str(e)}")
             return
 
-        self.publish_odometry()
+        # self.publish_odometry()
 
 
     def imu_callback(self, msg):
