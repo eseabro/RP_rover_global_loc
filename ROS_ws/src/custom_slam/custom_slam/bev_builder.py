@@ -71,24 +71,10 @@ def build_local_bev_map(points_3d, x_range=(-20, 20), y_range=(-20, 20), resolut
 
     return bev_map
 
-def build_colour_bev_map(points_3d_rgb, x_range=(-20, 20), y_range=(-20, 20), resolution=0.2):
-    h = int((y_range[1] - y_range[0]) / resolution)
-    w = int((x_range[1] - x_range[0]) / resolution)
-    bev_map = np.zeros((h, w, 3), dtype=np.uint8)
-
-    for pt in points_3d_rgb:
-        x, y, z, r, g, b = pt
-        if x_range[0] <= x <= x_range[1] and y_range[0] <= y <= y_range[1]:
-            ix = int((x - x_range[0]) / resolution)
-            iy = int((y - y_range[0]) / resolution)
-            bev_map[iy, ix] = [b, g, r]  # OpenCV uses BGR
-    cv2.imwrite("src/test_color_bev.png", bev_map)
-    print("Wrote color BEV map to /tmp/test_color_bev.png")
-
-    return bev_map
-
 
 def extract_bev_features(bev_image):
     orb = cv2.ORB_create(1000)
     keypoints, descriptors = orb.detectAndCompute(bev_image, None)
     return keypoints, descriptors
+
+

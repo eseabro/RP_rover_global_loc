@@ -61,7 +61,7 @@
         <collision>
             <origin rpy="0 0 -3.14" xyz="0 0 0.0"/>
             <geometry>
-                    <box size="0.2 0.1 0.05"/>
+                <box size="0.2 0.1 0.05"/>
             </geometry>
         </collision>
 
@@ -265,7 +265,7 @@
             <collision>
                 <origin rpy="0 0 ${dir*-1.57}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel_link_left_2.stl"/>
+                    <box size="0.2 0.1 0.05"/>
                 </geometry>
             </collision>
 
@@ -297,7 +297,7 @@
             <collision>
                 <origin rpy="${origin} 0 ${-dir*1.57}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel_middle_left.stl"/>
+                    <box size="0.2 0.1 0.05"/>
                 </geometry>
             </collision>
 
@@ -329,7 +329,7 @@
             <collision>
                 <origin rpy="0 0 ${-dir*1.57}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel_link_left_2.stl"/>
+                    <box size="0.2 0.1 0.05"/>
                 </geometry>
             </collision>
 
@@ -369,7 +369,7 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel.stl"/>
+                    <cylinder radius="0.0675" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>
@@ -409,7 +409,7 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel.stl"/>
+                    <cylinder radius="0.0675" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>
@@ -448,7 +448,7 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <mesh filename="file://$(find custom_slam)/meshes/wheel.stl"/>
+                    <cylinder radius="0.0675" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>

@@ -7,7 +7,7 @@ from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
 import math
 
-from .bev_builder import build_local_bev_map, build_colour_bev_map
+from .bev_builder import build_local_bev_map
 
 class BEVMapperNode(Node):
     def __init__(self):
@@ -31,36 +31,21 @@ class BEVMapperNode(Node):
             return
         self.get_logger().info("Map received")
 
-        points = []
-        for p in pc2.read_points(msg, field_names=["x", "y", "z", "rgb"], skip_nans=True):
-            
-            x, y, z, rgb = p
-            if math.isnan(rgb):  # Skip if RGB is NaN
-                continue
-            rgb = int(rgb)
-            r = (rgb >> 16) & 255
-            g = (rgb >> 8) & 255
-            b = rgb & 255
-            points.append([x, y, z, r, g, b])
-        self.map_points = np.array(points)
-        self.get_logger().info(f"Map points extracted: {len(self.map_points)}")
+        self.map_points = np.array([[p[0], p[1], p[2]] for p in pc2.read_points(msg, skip_nans=True)])
 
         # Extract pose translation
         pos = self.pose.pose.pose.position
         t = np.array([pos.x, pos.y, pos.z])
 
         # Filter points within radius
-        radius = 30.0
+        radius = 300.0
         local_pts = np.array([p for p in self.map_points if np.linalg.norm(p - t) < radius])
 
-        self.get_logger().info("Sample RGB values from local_pts:")
-        self.get_logger().info(local_pts[:10, 3:6])  # Expecting something like [[123 45 200] ...]
-
         # Build BEV
-        local_bev_map = build_colour_bev_map(local_pts)
+        local_bev_map = build_local_bev_map(local_pts)
 
         # Publish BEV image
-        bev_img_msg = self.bridge.cv2_to_imgmsg(local_bev_map, encoding='bgr8')
+        bev_img_msg = self.bridge.cv2_to_imgmsg(local_bev_map, encoding='mono8')
         # print("BEV shape:", local_bev_map.shape)
         # print("dtype:", local_bev_map.dtype)
 
