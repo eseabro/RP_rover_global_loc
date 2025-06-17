@@ -54,19 +54,19 @@ class GlobalBEVBuilder:
         return self.global_bev_map
 
 
-def build_local_bev_map(points_3d, x_range=(-20, 20), y_range=(-20, 20), resolution=0.2):
+def build_local_bev_map(points_3d, radius=30, resolution=0.2):
     """
     Create a BEV map (2D occupancy) from a 3D point cloud.
     """
-    bev_map = np.zeros((int((y_range[1] - y_range[0]) / resolution),
-                        int((x_range[1] - x_range[0]) / resolution)),
+    bev_map = np.zeros((int((2 * radius) / resolution),
+                        int((2 * radius) / resolution)),
                        dtype=np.uint8)
 
     for p in points_3d:
         x, y, z = p
-        if x_range[0] <= x <= x_range[1] and y_range[0] <= y <= y_range[1]:
-            ix = int((x - x_range[0]) / resolution)
-            iy = int((y - y_range[0]) / resolution)
+        if abs(x) <= radius and abs(y) <= radius:
+            ix = int((x + radius) / resolution)
+            iy = int((y + radius) / resolution)
             bev_map[iy, ix] = 255  # mark occupied
 
     return bev_map

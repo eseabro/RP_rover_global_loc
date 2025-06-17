@@ -6,6 +6,18 @@
 
     <link name="marsyard">
 
+      <inertial>
+        <mass>10000.0</mass> <!-- Increase this -->
+        <inertia>
+          <ixx>10000.0</ixx>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyy>10000.0</iyy>
+          <iyz>0.0</iyz>
+          <izz>10000.0</izz>
+        </inertia>
+      </inertial>
+
       <collision name="terrain_collision">
         <geometry>
           <heightmap>
@@ -17,8 +29,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>0.5</mu>        <!-- Lateral friction (try 0.5 - 1.0 for normal terrain) -->
-              <mu2>0.5</mu2>        <!-- Second friction direction -->
+              <mu>1.0</mu>        <!-- Lateral friction (try 0.5 - 1.0 for normal terrain) -->
+              <mu2>1.0</mu2>        <!-- Second friction direction -->
             </ode>
           </friction>
           <contact>

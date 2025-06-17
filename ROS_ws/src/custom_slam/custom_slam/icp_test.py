@@ -1,11 +1,13 @@
 import cv2
 import numpy as np
 import open3d as o3d
+import matplotlib
+matplotlib.use('TkAgg')  # Use TkAgg backend for matplotlib
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 
-def extract_features(img1, img2, img3):
-    sift = cv2.AKAZE_create()
+def extract_features(img1, img2, img3=None):
+    sift = cv2.BRISK_create()
     #     threshold=0.0003,         # lower threshold = more detections
     #     nOctaves=5,
     #     nOctaveLayers=6,
@@ -21,13 +23,18 @@ def extract_features(img1, img2, img3):
     img_with_kp2 = cv2.drawKeypoints(img2, keypoints2, None)
     plt.imshow(img_with_kp2)
     plt.show()
-    keypoints3, descriptors3 = sift.detectAndCompute(img3, None)
-    img_with_kp3 = cv2.drawKeypoints(img3, keypoints3, None)
-    plt.imshow(img_with_kp3)
-    plt.show()
     print(f"[SIFT] Extracted {len(keypoints1)} keypoints from img1")
     print(f"[SIFT] Extracted {len(keypoints2)} keypoints from img2")
-    print(f"[SIFT] Extracted {len(keypoints3)} keypoints from img3")
+
+    if img3 is not None:
+        keypoints3, descriptors3 = sift.detectAndCompute(img3, None)
+        img_with_kp3 = cv2.drawKeypoints(img3, keypoints3, None)
+        plt.imshow(img_with_kp3)
+        plt.show()
+        print(f"[SIFT] Extracted {len(keypoints3)} keypoints from img3")
+
+    else:
+        keypoints3, descriptors3 = None, None
     return keypoints1, descriptors1, keypoints2, descriptors2, keypoints3, descriptors3
 
 def extract_LSD_features(img, method="endpoints"):
@@ -139,7 +146,7 @@ def show_keypoint_matches(img1, kp1, img2, kp2, matches, inlier_mask=None, title
 
 def show_icp_overlay(global_img, local_img, R, t, alpha=0.5):
     """
-    Show only the white lines in local_img as blue over the global grayscale map.
+    Overlay the entire local_img as a bluescale transparent layer over global_img using a 2D transform.
     """
     h_g, w_g = global_img.shape
     h_l, w_l = local_img.shape
@@ -147,37 +154,35 @@ def show_icp_overlay(global_img, local_img, R, t, alpha=0.5):
     # Build 2x3 affine transform matrix
     M = np.hstack([R, t.reshape(2, 1)])
 
-    # Convert global image to color
+    # Convert global image to BGR color
     global_color = cv2.cvtColor(global_img, cv2.COLOR_GRAY2BGR)
 
-    # Threshold local image to get white lines (you can tune the threshold)
-    _, mask = cv2.threshold(local_img, 200, 255, cv2.THRESH_BINARY)
-
-    # Create blue overlay (BGR)
+    # Convert local image to "bluescale" (only blue channel gets intensity)
     local_blue = np.zeros((h_l, w_l, 3), dtype=np.uint8)
-    local_blue[mask > 0] = [255, 0, 0]  # Blue where white lines are
+    local_blue[:, :, 0] = local_img  # Blue channel gets intensity
 
-    # Warp blue overlay into global image space
-    warped_blue = cv2.warpAffine(local_blue, M, (w_g, h_g))
+    # Warp the blue-tinted local image into the global image space
+    warped_blue = cv2.warpAffine(local_blue, M, (w_g, h_g), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
-    # Combine global and warped blue with transparency
+    # Blend global image and blue overlay
     overlay = cv2.addWeighted(global_color, 1 - alpha, warped_blue, alpha, 0)
 
     # Show result
     plt.figure(figsize=(10, 8))
-    plt.title("Blue Local Map Lines Overlaid on Global Map")
+    plt.title("Bluescale Local Image Overlaid on Global Map")
     plt.imshow(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
     plt.axis('off')
     plt.show()
+
 
 
 def estimate_crop_offset(global_pts, local_pts):
     return np.median(global_pts - local_pts, axis=0)
 
 def main():
-    img1 = cv2.imread('src/img/global_map.png')
-    img2 = cv2.imread('src/img/local_map_2.png', cv2.IMREAD_GRAYSCALE)
-    img3 = cv2.imread('src/img/local_map_crop.png', cv2.IMREAD_GRAYSCALE)
+    img1 = cv2.imread('src/custom_slam/images/global_map.png', cv2.IMREAD_GRAYSCALE)
+    img2 = cv2.imread('src/custom_slam/images/local_control.png', cv2.IMREAD_GRAYSCALE)
+    img3 = cv2.imread('src/custom_slam/images/test2.png', cv2.IMREAD_GRAYSCALE)
 
 
 
@@ -197,7 +202,6 @@ def main():
 
     matches = match_features(desc1, desc2)
     
-    matches2 = match_features(desc1, desc3)
 
     pts1, pts2 = get_matched_points(kp1, kp2, matches)
 
@@ -227,32 +231,33 @@ def main():
     # ✅ Overlay aligned local map using corrected transform
     show_icp_overlay(img1, img2, R, t)
 
+    if kp3 is not None and desc3 is not None:
+        matches2 = match_features(desc1, desc3)
+        pts1, pts2 = get_matched_points(kp1, kp3, matches2)
 
-    pts1, pts2 = get_matched_points(kp1, kp3, matches2)
+        H, inliers = ransac_filter(pts1, pts2)
 
-    H, inliers = ransac_filter(pts1, pts2)
-
-    if H is None:
-        print("RANSAC failed to find a valid affine transform.")
-        return
-
-
-    show_keypoint_matches(img1, kp1, img3, kp3, matches2, inliers)
-    inlier_mask = np.array(inliers, dtype=bool)
-    pts1_inliers = pts1[inlier_mask]
-    pts2_inliers = pts2[inlier_mask]
-
-    source_cloud, target_cloud, result = run_icp(pts2_inliers, pts1_inliers, H)
+        if H is None:
+            print("RANSAC failed to find a valid affine transform.")
+            return
 
 
+        show_keypoint_matches(img1, kp1, img3, kp3, matches2, inliers)
+        inlier_mask = np.array(inliers, dtype=bool)
+        pts1_inliers = pts1[inlier_mask]
+        pts2_inliers = pts2[inlier_mask]
 
-    T = result.transformation  # 4x4 matrix
-    R = T[:2, :2]              # 2x2 rotation matrix
-    t = T[:2, 3]               # 2D translation vector
+        source_cloud, target_cloud, result = run_icp(pts2_inliers, pts1_inliers, H)
 
 
-    # ✅ Overlay aligned local map using corrected transform
-    show_icp_overlay(img1, img3, R, t)
+
+        T = result.transformation  # 4x4 matrix
+        R = T[:2, :2]              # 2x2 rotation matrix
+        t = T[:2, 3]               # 2D translation vector
+
+
+        # ✅ Overlay aligned local map using corrected transform
+        show_icp_overlay(img1, img3, R, t)
 
     # Visualization
     # source_transformed = copy.deepcopy(source_cloud).transform(result.transformation)

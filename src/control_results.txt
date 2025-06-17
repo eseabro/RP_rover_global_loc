@@ -1,0 +1,18 @@
+[BRISK] Extracted 642 keypoints from img1
+[BRISK] Extracted 14 keypoints from img2
+[Match] Found 13 total matches
+Mean match distance: 23.076923076923077
+[RANSAC] Found 12 inliers out of 13 matches
+RANSAC Homography Matrix:
+ [[-1.20613410e-02  1.00337411e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  4.99655238e+02]]
+Running ICP on inliers...
+[ICP Input] Local (source) points: (12, 2)
+[ICP Input] Global (target) points: (12, 2)
+ICP Transformation Matrix:
+ [[-1.20613410e-02  1.00337411e+00  0.00000000e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  0.00000000e+00  4.99655238e+02]
+ [ 0.00000000e+00  0.00000000e+00  1.00000000e+00  0.00000000e+00]
+ [ 0.00000000e+00  0.00000000e+00  0.00000000e+00  1.00000000e+00]]
+[ICP] Fitness: 1.0000
+[ICP] Inlier RMSE: 0.6270

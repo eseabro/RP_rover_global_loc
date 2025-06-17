@@ -6,28 +6,74 @@ rtabmap:
     sync_queue_size: 30
     topic_queue_size: 30
     approx_sync_max_interval: 0.1  # Accept up to 100ms difference
-    qos_image: 1
-    qos_odom: 1
-    frame_id: "base_footprint"
+    qos_image: 0
+    qos_odom: 0
+    frame_id: "camera_bottom_screw_frame"
     subscribe_depth: false
+    subscribe_rgb: false
     subscribe_rgbd: true
     subscribe_scan: false
     subscribe_scan_cloud: false
     subscribe_stereo: false
     subscribe_user_data: false
-    
-
+    Reg/Force3DoF: "false"
+    IMU/Used: "true"    
+    IMU/GravityIgnored: 'false'       # (default) Use gravity to reduce Z drift
+    IMU/FilterStrategy: 2  
+    Optimizer/Strategy: "2"
+    Optimizer/Slam2D: "false"  # Use 3D SLAM
+    RGBD/NeighborLinkRefining: "true"  # Refine links between RGBD images
+    Odom/Strategy: "2"
+    Odom/GuessMotion: "true"
+    OdomF2M/MaxSize: "5000"
     # ✅ Enable 3D mapping and color
     RGBD/CreateRGB: "true"
-    CloudRGB: "true"
     Grid/3D: "true"
-    RGBD/CreateRGB: "true"
+    Grid/FromDepth: "true"  # Use depth for 3D grid mapping
+    Grid/NormalSegmentation: "true"  # Use normal segmentation for better surface representation
+    Grid/NormalsSegmentationGround: "true"
     CloudRGB: "true"
+    RGBD/VisualOdom: "true"            # Use visual odometry
+    rgbd_odometry: "true"
+
 
     # Optional tuning
-    Vis/MinInliers: "10"
-    Mem/STMSize: "30"
-    Reg/Strategy: "0"  # visual-only
+    Vis/MinInliers: "8"
+    Mem/STMSize: "100"
+    Reg/Strategy: "1"  # visual-only
+
+
+    RGBD/OptimizeMaxError: "7.0"
+    Vis/MaxDepth: "10.0"
+    Vis/CorType: "0"      # Use optical flow matching
+    Kp/MaxDepth: "10.0"
+    Kp/DetectorStrategy: "0"  # ORB
+    RGBD/LinearUpdate: "0.1"
+    RGBD/AngularUpdate: "0.05"
+    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityPathMaxNeighbors: "5"
+
+    RGBD/LoopClosureReextractFeatures: "true"
+    RGBD/LocalLoopDetectionSpace: "true"
+    RGBD/LocalLoopDetectionRadius: "15.0"
+    RGBD/LocalLoopDetectionTime: "30.0"
+
+rtabmap_odom:
+  ros__parameters:
+    use_sim_time: true
+    approx_sync: true
+    sync_queue_size: 30
+    topic_queue_size: 30
+    approx_sync_max_interval: 0.1  # Accept up to 100ms difference
+    frame_id: "camera_bottom_screw_frame"
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_rgbd: true
+    subscribe_scan: false
+    subscribe_scan_cloud: false
+    subscribe_stereo: false
+    subscribe_user_data: false
+
 
 rgbd_sync:
   ros__parameters:
@@ -64,8 +110,6 @@ rtabmap_viz:
     RGBD/CreateRGB: "true"
     CloudRGB: "true"
     Grid/3D: "true"
-    RGBD/CreateRGB: "true"
-    CloudRGB: "true"
 
     # Optional tuning for visualization
     Vis/MinInliers: "10"

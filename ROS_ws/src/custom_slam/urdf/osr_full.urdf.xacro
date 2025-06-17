@@ -369,13 +369,13 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <cylinder radius="0.0675" length="0.052"/>
+                    <cylinder radius="0.075" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>
                         <ode>
-                            <mu>0.7</mu>
-                            <mu2>0.3</mu2>
+                            <mu>3.7</mu>
+                            <mu2>3.3</mu2>
                         </ode>
                     </friction>
                 </surface>
@@ -409,13 +409,13 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <cylinder radius="0.0675" length="0.052"/>
+                    <cylinder radius="0.075" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>
                         <ode>
-                            <mu>0.7</mu>
-                            <mu2>0.3</mu2>
+                            <mu>3.7</mu>
+                            <mu2>3.3</mu2>
                         </ode>
                     </friction>
                 </surface>
@@ -448,13 +448,13 @@
             <collision>
                 <origin rpy="-1.57 0 ${origin}" xyz="0 0 0.0"/>
                 <geometry>
-                    <cylinder radius="0.0675" length="0.052"/>
+                    <cylinder radius="0.075" length="0.052"/>
                 </geometry>
                 <surface>
                     <friction>
                         <ode>
-                            <mu>0.7</mu>
-                            <mu2>0.3</mu2>
+                            <mu>3.7</mu>
+                            <mu2>3.3</mu2>
                         </ode>
                     </friction>
                 </surface>

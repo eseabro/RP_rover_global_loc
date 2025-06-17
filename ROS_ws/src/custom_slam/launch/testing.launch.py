@@ -2,7 +2,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
+from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 from launch.actions import TimerAction
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.substitutions import FindPackageShare
@@ -24,17 +25,25 @@ def generate_launch_description():
           ('rgb/image', '/color/image_raw'),
           ('rgb/camera_info', '/color/camera_info'),
           ('depth/image', '/aligned_depth_to_color/image_raw'),
-          ('odom', '/osr/odom')] 
+          ('odom', '/odom')] 
+    
+    # rtab_remap=[
+    #       ('/imu', '/imu_plugin/out'),
+    #       ('odom', '/osr/odom'),
+    #       ('left/image_rect', '/infra1/image_raw'),
+    #       ('right/image_rect', '/infra2/image_raw'),
+    #       ('left/camera_info', '/infra1/camera_info'),
+    #       ('right/camera_info', '/infra2/camera_info')] 
 
     # Correct paths
-    # world = os.path.join(
-    #     get_package_share_directory('custom_slam'),
-    #     'worlds',
-    #     'marsyard2022.world'
-    # )
+    world = os.path.join(
+        get_package_share_directory('custom_slam'),
+        'worlds',
+        'marsyard2022.world'
+    )
 
-    pkg_gazebo = FindPackageShare("turtlebot3_gazebo").find("turtlebot3_gazebo")
-    world = os.path.join(pkg_gazebo, "worlds", "turtlebot3_house.world")
+    # pkg_gazebo = FindPackageShare("turtlebot3_gazebo").find("turtlebot3_gazebo")
+    # world = os.path.join(pkg_gazebo, "worlds", "turtlebot3_house.world")
 
     custom_slam_models_path = os.path.join(
         get_package_share_directory('custom_slam'),
@@ -121,6 +130,26 @@ def generate_launch_description():
         cmd=['ros2', 'control', 'load_controller', '--set-state', 'active', 'servo_controller'],
         output='screen'
     )
+
+    stereo_odom = Node(
+            package='rtabmap_odom',
+            executable='stereo_odometry',
+            name='stereo_odometry',
+            output='screen',
+            parameters=[{
+                'frame_id': 'base_link',
+                'odom_frame_id': 'odom',
+                'publish_tf': True,
+                'subscribe_stereo': True,
+                'approx_sync': True
+            }],
+            remappings=[
+                ('left/image_rect', '/infra1/image_rect'),
+                ('right/image_rect', '/infra2/image_rect'),
+                ('left/camera_info', '/infra1/camera_info'),
+                ('right/camera_info', '/infra2/camera_info'),
+            ]
+        )
     
     rgbd_sync = Node(
         package='rtabmap_sync',
@@ -129,16 +158,36 @@ def generate_launch_description():
         output='screen',
         parameters=[rtabmap_param_file],
         remappings=rtab_remap
-
     )
-
+    rect = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('stereo_image_proc'),
+                'launch',
+                'stereo_image_proc.launch.py'
+            )
+        ),
+        launch_arguments={
+            'left_namespace': '/infra1',
+            'right_namespace': '/infra2'
+        }.items()
+    )
+    rtabmap_odom = Node(
+        package='rtabmap_odom',
+        executable='rgbd_odometry',
+        name='rtabmap_odom',
+        output='screen',
+        parameters=[rtabmap_param_file],
+        arguments=['-d', '--ros-args', '--log-level', 'warn'],
+        remappings=[('/imu', '/imu_plugin/out')]
+    )
     rtabmap = Node(
         package='rtabmap_slam',
         executable='rtabmap',
         name='rtabmap',
         output='screen',
         parameters=[rtabmap_param_file],
-        arguments=['-d'],
+        arguments=['-d', '--ros-args', '--log-level', 'warn'],
         remappings=rtab_remap
     )
     viz = Node(
@@ -153,8 +202,7 @@ def generate_launch_description():
             package='custom_slam',
             executable='bev_mapper_node',
             name='bev_mapper_node',
-            output='screen',
-            arguments=['--ros-args', '--log-level', 'custom_slam.bev_mapper_node:=info']
+            output='screen'
         )
     # odom_param_file = PathJoinSubstitution([
     #     FindPackageShare('custom_slam'), 'config', 'ekf_imu.yaml'
@@ -166,12 +214,15 @@ def generate_launch_description():
     #         output='screen',
     #         parameters=[odom_param_file]
     #     )
-
+    delayed_rtabmap = TimerAction(
+            period=10.0,
+            actions=[rtabmap_odom]
+        )
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('x_pose', default_value='-3.0'),
         DeclareLaunchArgument('y_pose', default_value='-3.0'),
-        DeclareLaunchArgument('z_pose', default_value='2.0'),
+        DeclareLaunchArgument('z_pose', default_value='0.1'),
         gazebo,
         robot_state_publisher_node,
         spawn_after_gazebo,
@@ -179,6 +230,9 @@ def generate_launch_description():
         load_joint_state_controller,
         rover_wheel_controller,
         servo_controller,
+        delayed_rtabmap,
+        # rect,
+        # stereo_odom,
         # odom,
         rgbd_sync,
         rtabmap,

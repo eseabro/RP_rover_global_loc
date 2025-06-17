@@ -1,61 +1,77 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, Image
-from geometry_msgs.msg import PoseWithCovarianceStamped
 import numpy as np
+import cv2
 from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
-import math
+import struct
 
-from .bev_builder import build_local_bev_map
-
-class BEVMapperNode(Node):
+class CloudMapBEVNode(Node):
     def __init__(self):
-        super().__init__('bev_mapper')
+        super().__init__('cloud_map_bev_node')
+
+        self.subscription = self.create_subscription(
+            PointCloud2,
+            '/cloud_map',
+            self.cloud_map_callback,
+            10)
+
+        self.bev_pub = self.create_publisher(Image, '/cloud_map_bev', 10)
+
         self.bridge = CvBridge()
 
-        self.pose_sub = self.create_subscription(PoseWithCovarianceStamped, '/localization_pose', self.pose_callback, 10)
-        self.map_sub = self.create_subscription(PointCloud2, '/cloud_map', self.map_callback, 10)
+        # BEV parameters
+        self.radius = 30.0  # meters around robot to include
+        self.resolution = 0.1  # meters per pixel
 
-        self.bev_pub = self.create_publisher(Image, '/local_bev_map', 10)
-        self.get_logger().info("BEV Mapper Node started")
-        self.pose = None
-        self.map_points = []
+        # Image size (pixels)
+        self.img_size = int((2 * self.radius) / self.resolution)
 
-    def pose_callback(self, msg):
-        self.pose = msg
-        self.get_logger().info(f"Pose received: {self.pose.pose.pose.position.x}, {self.pose.pose.pose.position.y}, {self.pose.pose.pose.position.z}")
+        self.get_logger().info("CloudMapBEVNode started")
 
-    def map_callback(self, msg):
-        if self.pose is None:
-            return
-        self.get_logger().info("Map received")
+    def unpack_rgb(self, rgb_float):
+        # Converts packed float RGB into tuple (R,G,B)
+        s = struct.pack('>f', rgb_float)
+        i = struct.unpack('>I', s)[0]
+        r = (i >> 16) & 0x0000ff
+        g = (i >> 8) & 0x0000ff
+        b = (i) & 0x0000ff
+        return (r, g, b)
 
-        self.map_points = np.array([[p[0], p[1], p[2]] for p in pc2.read_points(msg, skip_nans=True)])
+    def cloud_map_callback(self, msg):
+        # Create blank image (3-channel BGR)
+        bev_img = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
 
-        # Extract pose translation
-        pos = self.pose.pose.pose.position
-        t = np.array([pos.x, pos.y, pos.z])
+        # Read points from PointCloud2
+        points = pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
 
-        # Filter points within radius
-        radius = 300.0
-        local_pts = np.array([p for p in self.map_points if np.linalg.norm(p - t) < radius])
+        for p in points:
+            x, y, z, rgb_float = p
 
-        # Build BEV
-        local_bev_map = build_local_bev_map(local_pts)
+            # Filter points within radius
+            if abs(x) > self.radius or abs(y) > self.radius:
+                continue
 
-        # Publish BEV image
-        bev_img_msg = self.bridge.cv2_to_imgmsg(local_bev_map, encoding='mono8')
-        # print("BEV shape:", local_bev_map.shape)
-        # print("dtype:", local_bev_map.dtype)
+            # Convert 3D XY to pixel indices
+            ix = int((x + self.radius) / self.resolution)
+            iy = int((y + self.radius) / self.resolution)
 
-        self.bev_pub.publish(bev_img_msg)
-        self.get_logger().info("BEV map published")
+            # Convert float RGB to tuple
+            r, g, b = self.unpack_rgb(rgb_float)
 
+            # Paint pixel (OpenCV uses BGR)
+            bev_img[self.img_size - iy - 1, ix] = (b, g, r)
+
+        # Convert to ROS Image and publish
+        img_msg = self.bridge.cv2_to_imgmsg(bev_img, encoding="bgr8")
+        img_msg.header = msg.header
+        self.bev_pub.publish(img_msg)
+        self.get_logger().info("Published BEV image")
 
 def main(args=None):
     rclpy.init(args=args)
-    node = BEVMapperNode()
+    node = CloudMapBEVNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

@@ -33,6 +33,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bev_mapper_node = custom_slam.bev_mapper_node:main',
+            'rgbd_mapper_node = custom_slam.rgbd_mapper_node:main',
             'controller_node = custom_slam.controller_node:main',
             
         ],

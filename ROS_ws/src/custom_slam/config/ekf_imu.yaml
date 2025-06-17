@@ -1,32 +1,19 @@
 ekf_filter_node:
-  ros__parameters:
-    use_sim_time: true
-    frequency: 50.0
-    sensor_timeout: 0.1
+  frequency: 50
+  sensor_timeout: 0.1
+  two_d_mode: false
+  publish_tf: true
 
-    two_d_mode: true
+  odom0: /rtabmap/odom
+  odom0_config: [true, true, true,  true, true, true,  false, false, false,  false, false, false,  false, false, false]
+  odom0_differential: false
+  odom0_queue_size: 10
 
-    # Set only IMU enabled
-    imu0: /imu_plugin/out
-    imu0_config: [false, false, false,  # x, y, z position
-                  true,  true,  true,   # roll, pitch, yaw
-                  true,  true,  false,  # x, y, z velocity
-                  false, false, false]  # roll, pitch, yaw velocity
+  imu0: /imu/data
+  imu0_config: [false, false, false,  true, true, true,  true, true, true,  false, false, false,  false, false, false]
+  imu0_differential: false
+  imu0_queue_size: 10
 
-    imu0_differential: false
-    imu0_relative: true
-
-    publish_tf: true
-    map_frame: map
-    odom_frame: odom
-    base_link_frame: base_footprint
-    world_frame: odom
-
-
-    odom0: /osr/odom
-    odom0_config: [true, true, false,
-                  false, false, true,
-                  true, true, false,
-                  false, false, false]
-    odom0_differential: false
-    odom0_relative: true
+  world_frame: map
+  base_link_frame: base_link
+  odom_frame: odom
