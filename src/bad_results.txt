@@ -1,0 +1,65 @@
+[SIFT] Extracted 642 keypoints from img1
+[SIFT] Extracted 14 keypoints from img2
+[SIFT] Extracted 860 keypoints from img3
+[Match] Found 13 total matches
+Mean match distance: 23.076923076923077
+[RANSAC] Found 12 inliers out of 13 matches
+RANSAC Homography Matrix:
+ [[-1.20613410e-02  1.00337411e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  4.99655238e+02]]
+Running ICP on inliers...
+[ICP Input] Local (source) points: (12, 2)
+[ICP Input] Global (target) points: (12, 2)
+ICP Transformation Matrix:
+ [[-1.20613410e-02  1.00337411e+00  0.00000000e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  0.00000000e+00  4.99655238e+02]
+ [ 0.00000000e+00  0.00000000e+00  1.00000000e+00  0.00000000e+00]
+ [ 0.00000000e+00  0.00000000e+00  0.00000000e+00  1.00000000e+00]]
+[ICP] Fitness: 1.0000
+[ICP] Inlier RMSE: 0.6270
+ICP Result:
+[Match] Found 172 total matches
+Mean match distance: 116.36046511627907
+[RANSAC] Found 15 inliers out of 172 matches
+[ICP Input] Local (source) points: (15, 2)
+[ICP Input] Global (target) points: (15, 2)
+ICP Transformation Matrix:
+ [[  1.60462442  -0.20981105   0.         -59.19899572]
+ [  0.50626602   1.30940014   0.         -53.61777073]
+ [  0.           0.           1.           0.        ]
+ [  0.           0.           0.           1.        ]]
+[ICP] Fitness: 1.0000
+[ICP] Inlier RMSE: 7.9129
+(.venv) bernat@bernat-B760-AORUS-ELITE-AX:~/Documents/RP_rover_global_loc/ROS_ws$ python3 src/custom_slam/custom_slam/icp_test.py 
+[SIFT] Extracted 642 keypoints from img1
+[SIFT] Extracted 14 keypoints from img2
+[SIFT] Extracted 860 keypoints from img3
+[Match] Found 13 total matches
+Mean match distance: 23.076923076923077
+[RANSAC] Found 12 inliers out of 13 matches
+RANSAC Homography Matrix:
+ [[-1.20613410e-02  1.00337411e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  4.99655238e+02]]
+Running ICP on inliers...
+[ICP Input] Local (source) points: (12, 2)
+[ICP Input] Global (target) points: (12, 2)
+ICP Transformation Matrix:
+ [[-1.20613410e-02  1.00337411e+00  0.00000000e+00  1.52472618e+02]
+ [-9.89581701e-01 -3.64836547e-03  0.00000000e+00  4.99655238e+02]
+ [ 0.00000000e+00  0.00000000e+00  1.00000000e+00  0.00000000e+00]
+ [ 0.00000000e+00  0.00000000e+00  0.00000000e+00  1.00000000e+00]]
+[ICP] Fitness: 1.0000
+[ICP] Inlier RMSE: 0.6270
+ICP Result:
+[Match] Found 172 total matches
+Mean match distance: 116.36046511627907
+[RANSAC] Found 15 inliers out of 172 matches
+[ICP Input] Local (source) points: (15, 2)
+[ICP Input] Global (target) points: (15, 2)
+ICP Transformation Matrix:
+ [[  1.60462442  -0.20981105   0.         -59.19899572]
+ [  0.50626602   1.30940014   0.         -53.61777073]
+ [  0.           0.           1.           0.        ]
+ [  0.           0.           0.           1.        ]]
+[ICP] Fitness: 1.0000
+[ICP] Inlier RMSE: 7.9129
