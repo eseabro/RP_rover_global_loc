@@ -23,6 +23,7 @@ class RGBDBEVProjector(Node):
         self.canvas = np.zeros((self.size, self.size, 3), dtype=np.uint8)
 
         self.get_logger().info("RGBD BEV Projector started")
+        self.add_on_shutdown(self.save_image_on_shutdown)
 
     def map_callback(self, msg: MapData):
         self.canvas[:] = 0  # Clear canvas each callback

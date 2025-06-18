@@ -182,7 +182,7 @@ def estimate_crop_offset(global_pts, local_pts):
 def main():
     img1 = cv2.imread('src/custom_slam/images/global_map.png', cv2.IMREAD_GRAYSCALE)
     img2 = cv2.imread('src/custom_slam/images/local_control.png', cv2.IMREAD_GRAYSCALE)
-    img3 = cv2.imread('src/custom_slam/images/run1_local.png', cv2.IMREAD_GRAYSCALE)
+    img3 = cv2.imread('src/custom_slam/images/straight.png', cv2.IMREAD_GRAYSCALE)
 
 
 

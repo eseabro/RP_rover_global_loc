@@ -6,6 +6,8 @@ import cv2
 from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
 import struct
+import os 
+
 
 class CloudMapBEVNode(Node):
     def __init__(self):
@@ -39,6 +41,14 @@ class CloudMapBEVNode(Node):
         b = (i) & 0x0000ff
         return (r, g, b)
 
+    def save_image_on_shutdown(self):
+        if self.latest_image is not None:
+            output_path = os.path.expanduser('./src/custom_slam/images/last_bev_image.png')
+            cv2.imwrite(output_path, self.latest_image)
+            self.get_logger().info(f"Saved latest image to {output_path}")
+        else:
+            self.get_logger().warn("No image was received; nothing to save.")
+
     def cloud_map_callback(self, msg):
         # Create blank image (3-channel BGR)
         bev_img = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
@@ -64,6 +74,7 @@ class CloudMapBEVNode(Node):
             bev_img[self.img_size - iy - 1, ix] = (b, g, r)
 
         # Convert to ROS Image and publish
+        self.latest_image = bev_img.copy()
         img_msg = self.bridge.cv2_to_imgmsg(bev_img, encoding="bgr8")
         img_msg.header = msg.header
         self.bev_pub.publish(img_msg)
@@ -72,9 +83,14 @@ class CloudMapBEVNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = CloudMapBEVNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.save_image_on_shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
