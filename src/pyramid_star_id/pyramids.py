@@ -15,7 +15,7 @@ def build_kvector(catalog):
     n = len(catalog)
     pairs = []
     angles = []
-    vecs = np.stack([[c['x'], c['y'], c['elev']] for c in catalog], axis=0)
+    vecs = np.stack([[c["vec"][0], c["vec"][1], c["vec"][2]] for c in catalog], axis=0)
     norms = np.linalg.norm(vecs, axis=1, keepdims=True)
     vecs_unit = vecs / np.clip(norms, 1e-12, None)
     # compute all unique pairs

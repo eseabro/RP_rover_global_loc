@@ -23,7 +23,7 @@ def identify(catalog, observed_vectors, catalog_index=None,
         catalog_index = build_kvector(catalog)
 
     # Normalize vectors
-    cat_vecs_all = normalize_rows(np.stack([[c['x'], c['y'], c['elev']] for c in catalog], axis=0))
+    cat_vecs_all = normalize_rows(np.stack([[c["vec"][0], c["vec"][1], c["vec"][2]] for c in catalog], axis=0))
     observed_vectors = normalize_rows(observed_vectors)
 
     # Precompute observed pair angles (radians)
@@ -175,3 +175,24 @@ def identify(catalog, observed_vectors, catalog_index=None,
         "solutions": solutions,
         "best_solution": best
     }
+
+
+def umeyama_2d(p, q, with_scale=False):
+    p = np.asarray(p, dtype=float); q = np.asarray(q, dtype=float)
+    assert p.shape == q.shape and p.shape[1] == 2
+    N = p.shape[0]
+    mu_p = p.mean(axis=0); mu_q = q.mean(axis=0)
+    P = p - mu_p; Q = q - mu_q
+    Sigma = (Q.T @ P) / N
+    U, D, Vt = np.linalg.svd(Sigma)
+    S = np.eye(2)
+    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
+        S[-1,-1] = -1
+    R = U @ S @ Vt
+    if with_scale:
+        var_p = np.sum(P**2) / N
+        s = np.trace(np.diag(D) @ S) / var_p
+    else:
+        s = 1.0
+    t = mu_q - s * (R @ mu_p)
+    return s, R, t

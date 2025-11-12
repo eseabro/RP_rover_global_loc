@@ -17,31 +17,28 @@ def kabsch_rotation(A, B):
         R = Vt.T @ U.T
     return R
 
-def kabsch_pose(P_world, P_cam):
-    """
-    Compute best-fit rotation and translation aligning world points to camera points.
-    P_world, P_cam: Nx3 arrays (corresponding points)
-    Returns R, t such that P_cam ≈ R @ P_world + t
-    """
-    # Centroids
-    c_world = np.mean(P_world, axis=0)
-    c_cam = np.mean(P_cam, axis=0)
 
-    # Center
-    W = P_world - c_world
-    C = P_cam - c_cam
+def edge(a,b):
+    return (a,b) if a<=b else (b,a)
 
-    # Rotation via Kabsch
-    H = W.T @ C
+def to_edge_set(angle_entries):
+    return {edge(i,j) for (i,j,ang) in angle_entries}
+
+def kabsch_pose(A, B):
+    A = np.asarray(A); B = np.asarray(B)
+    muA = A.mean(axis=0); muB = B.mean(axis=0)
+    AA = A - muA; BB = B - muB
+    H = AA.T @ BB
     U, S, Vt = np.linalg.svd(H)
     R = Vt.T @ U.T
     if np.linalg.det(R) < 0:
-        Vt[-1, :] *= -1
+        Vt[-1,:] *= -1
         R = Vt.T @ U.T
-
-    # Translation
-    t = c_cam - R @ c_world
+    t = muB - R @ muA
     return R, t
+
+def apply_rotation(R, vecs):
+    return (R @ vecs.T).T
 
 def umeyama_transform(src, dst):
     """Estimate rotation and translation using Umeyama algorithm."""

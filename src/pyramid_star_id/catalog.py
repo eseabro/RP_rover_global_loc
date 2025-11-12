@@ -116,7 +116,7 @@ def save_catalog_csv(catalog, path):
         for c in catalog:
             writer.writerow([
                 c["id"], c["lat_deg"], c["lon_deg"], 
-                c["reflectance"], c["x"], c["y"], c["elev"]
+                c["reflectance"], c["vec"][0], c["vec"][1], c["vec"][2]
             ])
 
 

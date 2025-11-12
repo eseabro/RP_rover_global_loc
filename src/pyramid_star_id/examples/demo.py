@@ -1,10 +1,10 @@
 """Demo script showing how to use the package."""
-from pyramid_star_id import build_mars_catalog, simulate_observations, simulate_observations_with_pose, simulate_identity_observations, precompute_catalog_pyramids, identify, save_catalog_csv, build_kvector
+from pyramid_star_id import build_catalog, simulate_observations, simulate_observations_with_pose, simulate_identity_observations, precompute_catalog_pyramids, identify, save_catalog_csv, build_kvector
 import os
 
 def main():
     print('Building catalog...')
-    catalog = build_mars_catalog(n=60, seed=1)
+    catalog = build_catalog(n=60, seed=1)
     os.makedirs('output', exist_ok=True)
     print('Saving catalog...')
     save_catalog_csv(catalog, 'output/catalog.csv')
@@ -12,7 +12,7 @@ def main():
     # catalog_pyrs = precompute_catalog_pyramids(catalog)
     kvec_index = build_kvector(catalog)
     print('Simulating observations...')
-    sim = simulate_observations_with_pose(catalog, num_true=12, num_false=0, noise_deg=0.0, seed=2)
+    sim = simulate_observations(catalog, num_true=12, num_false=0, noise_deg=0.0, seed=2)
     # sim = simulate_identity_observations(catalog, num_true=10, seed=2)
     print("True indices:", sim['true_indices'])
     obs = sim['observed_vectors']

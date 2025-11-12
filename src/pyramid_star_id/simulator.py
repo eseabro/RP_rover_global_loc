@@ -13,6 +13,12 @@ def perturb_unit_vector(v, sigma_rad, rng):
     v2 = R @ v
     return v2 / np.linalg.norm(v2)
 
+def normalize_rows(a):
+    a = np.asarray(a, dtype=float)
+    n = np.linalg.norm(a, axis=1, keepdims=True)
+    n[n == 0] = 1.0
+    return a / n
+
 def simulate_observations(catalog, num_true=8, num_false=4, noise_deg=0.01, fov_deg=180, seed=0):
     rng = np.random.RandomState(seed)
     n = len(catalog)
@@ -55,6 +61,39 @@ def simulate_observations(catalog, num_true=8, num_false=4, noise_deg=0.01, fov_
         "true_indices": list(true_indices),
         "R_true": R_true
     }
+
+
+def sample_observed(catalog, n_obs=10, seed=1, add_translation=True, pos_noise_m=0.5, ang_noise_deg=0.2):
+    rng = np.random.RandomState(seed)
+    chosen = rng.choice(len(catalog), size=min(n_obs, len(catalog)), replace=False)
+    axis = normalize_rows(rng.randn(1,3))[0]
+    angle = (rng.rand() - 0.5) * 2 * np.pi
+    K = np.array([[0, -axis[2], axis[1]],[axis[2], 0, -axis[0]],[-axis[1], axis[0], 0]])
+    R = np.eye(3) + np.sin(angle)*K + (1-np.cos(angle))*(K@K)
+    t = rng.randn(3) * (50.0 if add_translation else 0.0)
+    observed = []
+    for idx in chosen:
+        e = catalog[idx]
+        pos = np.array([e['pos_x'], e['pos_y'], e['pos_z']])
+        vec = np.array([e['vec_x'], e['vec_y'], e['vec_z']])
+        pos_r = R @ pos + t
+        vec_r = R @ vec
+        pos_r = pos_r + rng.randn(3) * pos_noise_m
+        ang = np.radians(ang_noise_deg) * rng.randn()
+        ax = normalize_rows(rng.randn(1,3))[0]
+        K2 = np.array([[0, -ax[2], ax[1]],[ax[2], 0, -ax[0]],[-ax[1], ax[0], 0]])
+        Rn = np.eye(3) + np.sin(ang)*K2 + (1-np.cos(ang))*(K2@K2)
+        vec_r = Rn @ vec_r
+        vec_r = vec_r / np.linalg.norm(vec_r)
+        observed.append({
+            'id': e['id'],
+            'pos': pos_r,
+            'vec': vec_r,
+            'type': e['type'],
+            'radius': e['radius']
+        })
+    ground_truth = {'R': R, 't': t, 'selected_ids': list(chosen)}
+    return observed, ground_truth
 
 def simulate_observations_with_pose(
     catalog,
@@ -123,7 +162,7 @@ def simulate_observations_with_pose(
     # --- 4. Choose which landmarks are visible ---
     true_indices = rng.choice(range(n), size=min(num_true, n), replace=False)
     true_points_world = np.stack(
-        [[c['x'], c['y'], c['elev']] for c in catalog if c['id'] in (true_indices + 1)],
+        [[c["vec"][0], c["vec"][1], c["vec"][2]] for c in catalog if c['id'] in (true_indices + 1)],
         axis=0
     )
 
