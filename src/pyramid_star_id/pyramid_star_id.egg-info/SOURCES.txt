@@ -1,0 +1,6 @@
+README.md
+setup.py
+pyramid_star_id.egg-info/PKG-INFO
+pyramid_star_id.egg-info/SOURCES.txt
+pyramid_star_id.egg-info/dependency_links.txt
+pyramid_star_id.egg-info/top_level.txt
