@@ -3,24 +3,67 @@ from pyramid_star_id import build_geometric_hash_from_pts, build_catalog, identi
 import os
 import numpy as np
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_rover_scene(catalog, sim_result):
+    """
+    Plot the rover, catalog landmarks, and selected true + false landmarks.
+
+    Args:
+        catalog: list of dicts with 'x', 'y' entries.
+        sim_result: dict returned from simulate_observations_with_pose().
+    """
+    # --- Extract data ---
+    cat_xy = np.stack([[d['x'], d['y']] for d in catalog], axis=0)
+    rover_pos = sim_result['t_rover']
+    true_idx = sim_result['true_indices']
+    num_false = sim_result["n_false"]
+
+    # --- False points (if any) ---
+    observed = sim_result.get('observed_vectors', None)
+
+    # --- True landmarks (selected closest) ---
+    n_true = len(true_idx)
+    true_points = observed[:n_true]
+
+    false_points = observed[n_true:] if num_false > 0 else None
+
+    # --- Plot ---
+    plt.figure(figsize=(8, 8))
+    plt.scatter(cat_xy[:, 0], cat_xy[:, 1], color='lightgray', label='Catalog landmarks')
+    plt.scatter(true_points[:, 0], true_points[:, 1], color='dodgerblue', label='Selected landmarks', s=70)
+    plt.scatter(rover_pos[0], rover_pos[1], color='red', marker='^', s=120, label='Rover position')
+    if false_points is not None:
+        plt.scatter(false_points[:, 0], false_points[:, 1], color='orange', marker='x', s=80, label='False landmarks')
+
+    plt.xlabel("Longitude (deg)")
+    plt.ylabel("Latitude (deg)")
+    plt.title("Rover Scene: Catalog vs Selected Landmarks")
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')
+    plt.show()
+
 def main():
     print('Building catalog...')
-    catalog = build_catalog(n=60, seed=1)
+    catalog = build_catalog(n=200, seed=1)
     catalog_pts_2d = catalog_to_pts2d(catalog)
     os.makedirs('output', exist_ok=True)
+    
     print('Saving catalog...')
     save_catalog_csv(catalog, 'output/catalog.csv')
+    
     print('Precomputing catalog pyramids')
-    # catalog_pyrs = precompute_catalog_pyramids(catalog)
-    # ghash_index = build_geometric_hash(catalog)
     ghash_index = build_geometric_hash_from_pts(catalog_pts_2d)
+    
     print('Simulating observations...')
-    sim = simulate_observations_with_pose(catalog, num_true=30, num_false=0, noise_deg=0.0, seed=2)
+    sim = simulate_observations_with_pose(catalog, num_true=30, num_false=10, noise_deg=0.02, seed=2)
     obs = sim['observed_vectors'].astype(np.float32)
     true_indices = sim['true_indices']
+    plot_rover_scene(catalog=catalog, sim_result=sim)
+    
     print('Identifying observed features...')
-    # print(obs)
-
     result = identify_geometric(catalog_pts_2d, obs, hash_index=ghash_index)
     true_map = {obs_i: cat_i for obs_i, cat_i in enumerate(true_indices)}
     best = result['best_solution']
