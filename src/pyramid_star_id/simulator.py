@@ -144,13 +144,14 @@ def simulate_observations_with_pose(
     true_mean = np.mean(true_points, axis=0)
     true_median = np.median(true_points, axis=0)
     # generate around mean ± 10% random spread
-    false_r = rng.uniform(0.5, 1.5, size=num_false)  # random distance from rover
-    false_theta = rng.uniform(0, 2*np.pi, size=num_false)  # random angle
-    false_pts = np.column_stack([
-        false_r * np.cos(false_theta),
-        false_r * np.sin(false_theta)
-    ])
-
+    # false_r = rng.uniform(0.5, 1.5, size=num_false)  # random distance from rover
+    # false_theta = rng.uniform(0, 2*np.pi, size=num_false)  # random angle
+    # false_pts = np.column_stack([
+    #     false_r * np.cos(false_theta),
+    #     false_r * np.sin(false_theta)
+    # ])
+    spread = np.mean(np.linalg.norm(true_points - true_mean, axis=1))
+    false_pts = rng.normal(loc=true_mean, scale=spread, size=(num_false, 2))
     # --- 4. Add noise to true observations ---
     sigma_rad = np.deg2rad(noise_deg)
     observed_true = []
