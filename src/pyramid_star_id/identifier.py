@@ -23,10 +23,6 @@ def build_geometric_hash_from_pts(catalog_pts_2d):
         table.setdefault(inv, []).append((i, j, k))
     return table
 
-def catalog_to_pts2d(catalog):
-    # If your catalog entries have x,y
-    return np.stack([[c['x'], c['y']] for c in catalog], axis=0).astype(np.float32)
-
 def apply_similarity(pts, s, R, t):
     return (s * (pts @ R.T)) + t
 
@@ -86,113 +82,26 @@ def estimate_similarity_from_triangle(A, B):
 
     return s, R, t
 
-def identify_geometric(catalog_pts_2d, observed_pts_2d,
-                       hash_index=None, eps=2.0, max_hypotheses=20000):
-    if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
-        raise ValueError("catalog_pts_2d must be a (N,2) ndarray")
-    if not isinstance(observed_pts_2d, np.ndarray) or observed_pts_2d.shape[1] != 2:
-        raise ValueError("observed_pts_2d must be a (M,2) ndarray")
-
-    if hash_index is None:
-        hash_index = build_geometric_hash_from_pts(catalog_pts_2d)
-
-    best = None
-    hypotheses = 0
-
-    for oi, oj, ok in itertools.combinations(range(len(observed_pts_2d)), 3):
-        inv = triangle_invariants(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok])
-        if inv is None or inv not in hash_index:
-            continue
-
-        for (ci, cj, ck) in hash_index[inv]:
-            # Ensure indices are valid
-            if max(ci, cj, ck) >= len(catalog_pts_2d):
-                continue
-
-            A = np.stack([observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]], axis=0)
-            B = np.stack([catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck]], axis=0)
-
-            est = estimate_similarity_from_triangle(A, B)
-            if est is None:
-                continue
-            s, R, t = est
-
-            in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
-            if best is None or in_cnt > best['inlier_count']:
-                s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers, s, R, t)
-                in_cnt_ref, inliers_ref = score_transform(observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, eps=eps)
-
-                # Optional: collect matches (nearest neighbors for inliers)
-                from sklearn.neighbors import KDTree
-                X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
-                tree = KDTree(catalog_pts_2d)
-                dists, idxs = tree.query(X, k=1)
-                matches = [(int(idxs[i,0]), int(i), float(dists[i,0])) for i in range(len(X)) if inliers_ref[i]]
-
-                best = {
-                    's': s_ref, 'R': R_ref, 't': t_ref,
-                    'inlier_count': in_cnt_ref,
-                    'inliers': inliers_ref,
-                    'matches': matches,
-                    'seed_obs_triangle': (oi, oj, ok),
-                    'seed_cat_triangle': (ci, cj, ck)
-                }
-
-            hypotheses += 1
-            if hypotheses >= max_hypotheses:
-                break
-        if hypotheses >= max_hypotheses:
-            break
-
-    return {
-        'candidates': hypotheses,
-        'best_solution': best
-    }
-
-
-# def identify_geometric(sim_result, catalog,
+# def identify_geometric(catalog_pts_2d, observed_pts_2d,
 #                        hash_index=None, eps=2.0, max_hypotheses=20000):
-#     """
-#     Identify observed landmarks by geometric hashing against the global catalog.
-
-#     Args:
-#         sim_result: dict from simulate_observations_with_pose()
-#         catalog: list of dicts with 'x', 'y' keys
-#         hash_index: precomputed geometric hash (optional)
-#         eps: inlier tolerance (distance units match catalog, e.g., km)
-#         max_hypotheses: max number of triangle hypotheses to test
-#     Returns:
-#         dict with best transformation, inliers, and matches
-#     """
-#     # --- Extract data ---
-#     catalog_pts_2d = np.stack([[d['x'], d['y']] for d in catalog], axis=0)
-#     observed_local = sim_result['observed_vectors']
-#     R_true = sim_result['R_true']
-#     t_rover = sim_result['t_rover']
-
-#     # Convert observed (rover frame) → global coordinates
-#     observed_pts_2d = observed_local @ R_true + t_rover
-
-#     # --- Validate shapes ---
 #     if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
 #         raise ValueError("catalog_pts_2d must be a (N,2) ndarray")
 #     if not isinstance(observed_pts_2d, np.ndarray) or observed_pts_2d.shape[1] != 2:
 #         raise ValueError("observed_pts_2d must be a (M,2) ndarray")
 
-#     # --- Build geometric hash if missing ---
 #     if hash_index is None:
 #         hash_index = build_geometric_hash_from_pts(catalog_pts_2d)
 
 #     best = None
 #     hypotheses = 0
 
-#     # --- Triangle-based geometric hashing loop ---
 #     for oi, oj, ok in itertools.combinations(range(len(observed_pts_2d)), 3):
 #         inv = triangle_invariants(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok])
 #         if inv is None or inv not in hash_index:
 #             continue
 
 #         for (ci, cj, ck) in hash_index[inv]:
+#             # Ensure indices are valid
 #             if max(ci, cj, ck) >= len(catalog_pts_2d):
 #                 continue
 
@@ -202,18 +111,19 @@ def identify_geometric(catalog_pts_2d, observed_pts_2d,
 #             est = estimate_similarity_from_triangle(A, B)
 #             if est is None:
 #                 continue
-
 #             s, R, t = est
-#             in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
 
+#             in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
 #             if best is None or in_cnt > best['inlier_count']:
 #                 s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers, s, R, t)
 #                 in_cnt_ref, inliers_ref = score_transform(observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, eps=eps)
 
+#                 # Optional: collect matches (nearest neighbors for inliers)
+#                 from sklearn.neighbors import KDTree
 #                 X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
 #                 tree = KDTree(catalog_pts_2d)
 #                 dists, idxs = tree.query(X, k=1)
-#                 matches = [(int(idxs[i, 0]), int(i), float(dists[i, 0])) for i in range(len(X)) if inliers_ref[i]]
+#                 matches = [(int(idxs[i,0]), int(i), float(dists[i,0])) for i in range(len(X)) if inliers_ref[i]]
 
 #                 best = {
 #                     's': s_ref, 'R': R_ref, 't': t_ref,
@@ -234,5 +144,95 @@ def identify_geometric(catalog_pts_2d, observed_pts_2d,
 #         'candidates': hypotheses,
 #         'best_solution': best
 #     }
+
+
+def identify_geometric(sim_result, catalog,
+                       hash_index=None, eps=2.0, max_hypotheses=20000):
+    """
+    Identify observed landmarks by geometric hashing against the global catalog.
+
+    Args:
+        sim_result: dict from simulate_observations_with_pose()
+        catalog: list of dicts with 'x', 'y' keys
+        hash_index: precomputed geometric hash (optional)
+        eps: inlier tolerance (distance units match catalog, e.g., km)
+        max_hypotheses: max number of triangle hypotheses to test
+    Returns:
+        dict with best transformation, inliers, and matches
+    """
+    # --- Extract data ---
+    if type(catalog) is list:
+        catalog_pts_2d = catalog_to_pts2d(catalog)
+    else:
+        catalog_pts_2d = catalog
+
+    observed_local = sim_result['observed_vectors']
+    R_true = sim_result['R_true']
+    t_rover = sim_result['t_rover']
+
+    # Convert observed (rover frame) → global coordinates
+    observed_pts_2d = observed_local @ R_true + t_rover
+
+    # --- Validate shapes ---
+    if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
+        raise ValueError("catalog_pts_2d must be a (N,2) ndarray")
+    if not isinstance(observed_pts_2d, np.ndarray) or observed_pts_2d.shape[1] != 2:
+        raise ValueError("observed_pts_2d must be a (M,2) ndarray")
+
+    # --- Build geometric hash if missing ---
+    if hash_index is None:
+        hash_index = build_geometric_hash_from_pts(catalog_pts_2d)
+
+    best = None
+    hypotheses = 0
+
+    # --- Triangle-based geometric hashing loop ---
+    for oi, oj, ok in itertools.combinations(range(len(observed_pts_2d)), 3):
+        inv = triangle_invariants(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok])
+        if inv is None or inv not in hash_index:
+            continue
+
+        for (ci, cj, ck) in hash_index[inv]:
+            if max(ci, cj, ck) >= len(catalog_pts_2d):
+                continue
+
+            A = np.stack([observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]], axis=0)
+            B = np.stack([catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck]], axis=0)
+
+            est = estimate_similarity_from_triangle(A, B)
+            if est is None:
+                continue
+
+            s, R, t = est
+            in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
+
+            if best is None or in_cnt > best['inlier_count']:
+                s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers, s, R, t)
+                in_cnt_ref, inliers_ref = score_transform(observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, eps=eps)
+
+                X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
+                tree = KDTree(catalog_pts_2d)
+                dists, idxs = tree.query(X, k=1)
+                matches = [(int(idxs[i, 0]), int(i), float(dists[i, 0])) for i in range(len(X)) if inliers_ref[i]]
+
+                best = {
+                    's': s_ref, 'R': R_ref, 't': t_ref,
+                    'inlier_count': in_cnt_ref,
+                    'inliers': inliers_ref,
+                    'matches': matches,
+                    'seed_obs_triangle': (oi, oj, ok),
+                    'seed_cat_triangle': (ci, cj, ck)
+                }
+
+            hypotheses += 1
+            if hypotheses >= max_hypotheses:
+                break
+        if hypotheses >= max_hypotheses:
+            break
+
+    return {
+        'candidates': hypotheses,
+        'best_solution': best
+    }
 def identify():
     pass

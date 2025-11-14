@@ -27,10 +27,8 @@ def plot_rover_scene(catalog, sim_result):
     n_true = len(true_idx)
     # true_points = observed[:n_true]
     # true_points = cat_xy[true_idx]
-    true_points = sim_result['observed_vectors'] @ sim_result['R_true'] + sim_result['t_rover']
-
-
-    false_points = observed[n_true:] if num_false > 0 else None
+    true_points = observed[:n_true] @ sim_result['R_true'] + sim_result['t_rover']
+    false_points = observed[n_true:]  if num_false > 0 else None
 
     # --- Plot ---
     plt.figure(figsize=(8, 8))
@@ -64,7 +62,7 @@ def main():
     sim = simulate_observations_with_pose(catalog, num_true=30, num_false=10, noise_deg=0.01, seed=2)
     obs = sim['observed_vectors'].astype(np.float32)
     true_indices = sim['true_indices']
-    plot_rover_scene(catalog=catalog, sim_result=sim)
+    # plot_rover_scene(catalog=catalog, sim_result=sim)
     
     print('Identifying observed features...')
     result = identify_geometric(catalog_pts_2d, obs, hash_index=ghash_index)
