@@ -4,6 +4,7 @@ build/
 install/
 bin/
 lib/
+ROS_ws/src/custom_slam/images/
 msg_gen/
 srv_gen/
 msg/*Action.msg
