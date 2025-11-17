@@ -2,6 +2,7 @@ import numpy as np
 import itertools
 from sklearn.neighbors import KDTree
 from tqdm import tqdm
+import time
 
 def quant(x, binsize=0.01):
     return int(np.floor(x / binsize))
@@ -236,19 +237,73 @@ def canonical_triangle_vertex_order(pts3):
     return ordered_vertices  # length 3 list of indices in {0,1,2}
 
 # --- build_geometric_hash_from_pts: store canonical-ordered triangles ---
+# def build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01):
+#     table = {}
+#     n = len(catalog_pts_2d)
+#     for i, j, k in itertools.combinations(range(n), 3):
+#         pts3 = np.stack([catalog_pts_2d[i], catalog_pts_2d[j], catalog_pts_2d[k]], axis=0)
+#         order = canonical_triangle_vertex_order(pts3)
+#         # reorder indices to canonical (opposite-a, opposite-b, opposite-c)
+#         ci, cj, ck = [ (i, j, k)[idx] for idx in order ]
+#         inv = quantized_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize)
+#         if inv is None:
+#             continue
+#         table.setdefault(inv, []).append((ci, cj, ck))
+#     return table
+
+# from scipy.spatial.distance import pdist, squareform
+
+# def build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01):
+#     n = len(catalog_pts_2d)
+#     table = {}
+#     # pairwise distances once
+#     dists = squareform(pdist(catalog_pts_2d))
+#     for i, j, k in itertools.combinations(range(n), 3):
+#         # distances without recomputation
+#         d_pq, d_qr, d_rp = dists[i, j], dists[j, k], dists[k, i]
+#         lengths = np.array([d_pq, d_qr, d_rp], dtype=np.float64)
+#         if np.any(lengths < 1e-9):
+#             continue
+#         a, b, c = np.sort(lengths)
+#         # identify canonical vertex order using sorted lengths
+#         indices = [i, j, k]
+#         order = [indices[idx] for idx in np.argsort([d_pq, d_qr, d_rp])]
+#         ci, cj, ck = order
+#         inv = quantized_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize)
+#         if inv is None:
+#             continue
+#         table.setdefault(inv, []).append((ci, cj, ck))
+#     return table
+
+import numba
+
+@numba.njit
 def build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01):
-    table = {}
-    n = len(catalog_pts_2d)
-    for i, j, k in itertools.combinations(range(n), 3):
-        pts3 = np.stack([catalog_pts_2d[i], catalog_pts_2d[j], catalog_pts_2d[k]], axis=0)
-        order = canonical_triangle_vertex_order(pts3)
-        # reorder indices to canonical (opposite-a, opposite-b, opposite-c)
-        ci, cj, ck = [ (i, j, k)[idx] for idx in order ]
-        inv = quantized_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize)
-        if inv is None:
-            continue
-        table.setdefault(inv, []).append((ci, cj, ck))
-    return table
+    n = catalog_pts_2d.shape[0]
+    table_keys = []
+    table_vals = []
+
+    for i in range(n):
+        for j in range(i+1, n):
+            for k in range(j+1, n):
+                # compute distances
+                p, q, r = catalog_pts_2d[i], catalog_pts_2d[j], catalog_pts_2d[k]
+                d1 = np.linalg.norm(p - q)
+                d2 = np.linalg.norm(q - r)
+                d3 = np.linalg.norm(r - p)
+                lengths = np.array([d1, d2, d3])
+                if np.any(lengths < 1e-9):
+                    continue
+                a, b, c = np.sort(lengths)
+                # compute invariant (simplified without Python dict inside Numba)
+                ratio1 = int(np.floor(a/c / binsize))
+                ratio2 = int(np.floor(b/c / binsize))
+                # skip angles / area for now (or compute approximate)
+                key = (ratio1, ratio2)
+                table_keys.append(key)
+                table_vals.append((i,j,k))
+    return table_keys, table_vals
+
 
 def identify_geometric(sim_result, catalog,
                        hash_index=None,
@@ -280,7 +335,16 @@ def identify_geometric(sim_result, catalog,
 
     # --- Build hash if missing ---
     if hash_index is None:
-        hash_index = build_geometric_hash_from_pts(catalog_pts_2d, binsize=binsize)
+        start = time.perf_counter()
+        hash_keys, hash_vals = build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01)
+        hash_index = {}
+        for key, val in zip(hash_keys, hash_vals):
+            if key not in hash_index:
+                hash_index[key] = []
+            if len(hash_index[key]) < max_candidates_per_inv:
+                hash_index[key].append(val)
+        end = time.perf_counter()
+        print(f"Geometric hash built in {end - start:.3f} s")
 
     obs_indices = np.arange(len(observed_pts_2d))
     all_obs_tris = list(itertools.combinations(obs_indices, 3))
