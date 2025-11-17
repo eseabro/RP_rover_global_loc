@@ -1,0 +1,212 @@
+
+
+    def debug_pipeline():
+            # Right before "# --- RANSAC loop ---"
+        print("\n=== COMPLETE PIPELINE TEST ===")
+
+        # Get ground truth
+        true_indices = sim_result['true_indices']
+        print(f"Ground truth indices: {true_indices[:3]}")
+
+        # Test triangle (0,1,2) from observations
+        oi, oj, ok = 0, 1, 2
+        P, Q, R = observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]
+
+        print(f"\nObservation triangle vertices (rover frame, km):")
+        print(f"  P: {P}")
+        print(f"  Q: {Q}")
+        print(f"  R: {R}")
+
+        # What should they match in catalog?
+        ci_true, cj_true, ck_true = true_indices[0], true_indices[1], true_indices[2]
+        print(f"\nShould match catalog indices: {ci_true}, {cj_true}, {ck_true}")
+
+        B_true = np.stack([catalog_pts_2d[ci_true], catalog_pts_2d[cj_true], catalog_pts_2d[ck_true]], axis=0)
+        print(f"True catalog triangle (global frame, km):")
+        print(f"  B[0]: {B_true[0]}")
+        print(f"  B[1]: {B_true[1]}")
+        print(f"  B[2]: {B_true[2]}")
+
+        # Compute invariants
+        inv_obs = quantized_invariant(P, Q, R, binsize=binsize)
+        inv_cat = quantized_invariant(B_true[0], B_true[1], B_true[2], binsize=binsize)
+        print(f"\nObservation invariant: {inv_obs}")
+        print(f"Catalog invariant: {inv_cat}")
+        print(f"Match: {inv_obs == inv_cat}")
+
+        if inv_obs and inv_obs in hash_index:
+            print(f"\nHash lookup found {len(hash_index[inv_obs])} catalog triangles")
+            
+            # Is the true triangle in there?
+            found_exact = False
+            for (ci, cj, ck) in hash_index[inv_obs]:
+                if set([ci, cj, ck]) == set([ci_true, cj_true, ck_true]):
+                    found_exact = True
+                    print(f"✓ True triangle found in hash: ({ci}, {cj}, {ck})")
+                    
+                    # Try ALL 6 permutations and see which gives correct result
+                    A = np.stack([P, Q, R], axis=0)
+                    perms = [
+                        (ci_true, cj_true, ck_true),
+                        (ci_true, ck_true, cj_true),
+                        (cj_true, ci_true, ck_true),
+                        (cj_true, ck_true, ci_true),
+                        (ck_true, ci_true, cj_true),
+                        (ck_true, cj_true, ci_true),
+                    ]
+                    
+                    for idx, (c1, c2, c3) in enumerate(perms):
+                        B = np.stack([catalog_pts_2d[c1], catalog_pts_2d[c2], catalog_pts_2d[c3]], axis=0)
+                        est = estimate_similarity_from_triangle(A, B)
+                        if est:
+                            s, Rm, t = est
+                            print(Rm)
+                            in_cnt, inliers, rms, _, _ = score_transform_with_rms(
+                                observed_pts_2d, catalog_pts_2d, s, Rm, t, eps=eps
+                            )
+                            print(f"  Perm {idx}: ({c1},{c2},{c3}) -> inliers={in_cnt}/10, rms={rms:.3f}, scale={s:.3f}")
+                    break
+            
+            if not found_exact:
+                print(f"✗ True triangle NOT in hash results!")
+        else:
+            print(f"✗ Observation invariant not in hash table!")
+        # Add this right after the permutation test:
+        print("\n=== CHECKING BEST PERMUTATION ===")
+        # Use perm 2 or 5 (both got 4 inliers)
+        A = np.stack([P, Q, R], axis=0)
+        B = np.stack([catalog_pts_2d[10], catalog_pts_2d[45], catalog_pts_2d[86]], axis=0)
+
+        est = estimate_similarity_from_triangle(A, B)
+        s, Rm, t = est
+
+        print(f"Transform: scale={s:.6f}")
+        print(f"Rotation:\n{Rm}")
+        print(f"Translation: {t}")
+        print("Truth")
+        print(f"Transform: scale={s:.6f}")
+        print(f"Rotation:\n{sim_result['R_true']}")
+        print(f"Translation: {sim_result['t_rover'] * np.array([111.0 * np.cos(np.deg2rad(0.0)), 111.0])}")
+        # Apply to all observations and check distances
+        X = apply_similarity(observed_pts_2d, s, Rm, t)
+        print(f"\nResiduals for each observation:")
+        for i in range(len(observed_pts_2d)):
+            true_cat_idx = true_indices[i]
+            cat_point = catalog_pts_2d[true_cat_idx]
+            dist = np.linalg.norm(X[i] - cat_point)
+            print(f"  Obs {i} -> Cat {true_cat_idx}: distance = {dist:.3f} km (eps={eps})")
+
+        # Also check ground truth transform
+        print(f"\n=== GROUND TRUTH CHECK ===")
+        ref_lat = 0.0
+        deg_to_km_lat = 111.0
+        deg_to_km_lon = 111.0 * np.cos(np.deg2rad(ref_lat))
+        rover_pos_km = sim_result['t_rover'] * np.array([deg_to_km_lon, deg_to_km_lat])
+
+        X_true = (observed_pts_2d @ sim_result['R_true']) + rover_pos_km
+        print(f"Ground truth residuals:")
+        for i in range(len(observed_pts_2d)):
+            true_cat_idx = true_indices[i]
+            cat_point = catalog_pts_2d[true_cat_idx]
+            dist = np.linalg.norm(X_true[i] - cat_point)
+            print(f"  Obs {i} -> Cat {true_cat_idx}: distance = {dist:.3f} km")
+        # After the ground truth check:
+        print("\n=== FINDING CORRECT VERTEX CORRESPONDENCE ===")
+        # Which catalog points should each observation match?
+        for i in range(3):
+            obs_global = X_true[i]
+            true_cat_idx = true_indices[i]
+            print(f"Obs[{i}] in global frame: {obs_global}")
+            print(f"  → Should match Cat[{true_cat_idx}]: {catalog_pts_2d[true_cat_idx]}")
+            print(f"  Distance: {np.linalg.norm(obs_global - catalog_pts_2d[true_cat_idx]):.6f} km")
+        print("\n=== DEBUGGING estimate_similarity_from_triangle ===")
+        A = np.stack([P, Q, R], axis=0)  # Observations
+        B = np.stack([catalog_pts_2d[45], catalog_pts_2d[10], catalog_pts_2d[86]], axis=0)  # Correct catalog order
+
+        print(f"A (observations, rover frame):\n{A}")
+        print(f"B (catalog, global frame):\n{B}")
+        s, Rm, t = estimate_similarity_from_triangle(A, B)
+        print(f"estimate_similarity_from_triangle(A, B):\n Rotation: {est[1]}\n Translation: {est[2]}\n Scale: {est[0]}")
+
+        # Compare with ground truth
+        print(f"\n=== COMPARISON WITH GROUND TRUTH ===")
+        print(f"Ground truth rotation:\n{sim_result['R_true']}")
+        print(f"Ground truth translation (km): {rover_pos_km}")
+        print(f"\nRotation difference (Frobenius): {np.linalg.norm(Rm - sim_result['R_true'], 'fro'):.6f}")
+        print(f"Translation difference: {np.linalg.norm(t - rover_pos_km):.3f} km")
+
+        # Test the manually computed transform
+        X_manual = (observed_pts_2d @ Rm.T) * s + t
+        print(f"\n=== RESIDUALS WITH MANUAL TRANSFORM ===")
+        for i in range(3):
+            dist = np.linalg.norm(X_manual[i] - catalog_pts_2d[true_indices[i]])
+            print(f"  Obs {i} -> Cat {true_indices[i]}: distance = {dist:.3f} km")
+
+        print("\n=== Testing original technique ===")
+        s, Rm, t = estimate_similarity_from_triangle(A, B)
+        print(f"Initial transform: scale={s:.3f}, translation={t}, rotation=\n{Rm}")
+        in_cnt, inliers, rms, dists, idxs = score_transform_with_rms(
+            observed_pts_2d, catalog_pts_2d, s, Rm, t, eps=eps
+        )
+        print(f"Seed triangle transform: inliers={in_cnt}, RMS={rms:.3f}")
+        refit = fit_similarity_from_pairs(observed_pts_2d, catalog_pts_2d, inliers, idxs, max_iters=1)
+        if refit is not None:
+            s_all, R_all, t_all = refit
+            in_cnt_all, inliers_all, rms_all, dists_all, idxs_all = score_transform_with_rms(
+                observed_pts_2d, catalog_pts_2d, s_all, R_all, t_all, eps=eps
+            )
+            print(f"All-inliers refit: inliers={in_cnt_all}, RMS={rms_all:.3f}")
+            X_seed = apply_similarity(observed_pts_2d, s, Rm, t)
+            X_refit = apply_similarity(observed_pts_2d, s_all, R_all, t_all)
+
+            print("\nResiduals per observation:")
+            for i in range(len(observed_pts_2d)):
+                cat_point = catalog_pts_2d[true_indices[i]]
+                dist_seed = np.linalg.norm(X_seed[i] - cat_point)
+                dist_refit = np.linalg.norm(X_refit[i] - cat_point)
+                print(f"Obs {i}: seed={dist_seed:.3f} km, refit={dist_refit:.3f} km")
+
+
+        def quick_diagnostics(sim_result, catalog_pts_2d, observed_pts_2d, binsize, hash_index, eps):
+            print("\n=== QUICK DIAGNOSTICS ===")
+            # 1) sample ranges / units
+            print("Catalog (first few) [km]:\n", catalog_pts_2d[:5])
+            print("Observed (first few) [raw used by algorithm]:\n", observed_pts_2d[:5])
+            print("Catalog range x,y (km):", catalog_pts_2d[:,0].min(), catalog_pts_2d[:,0].max(),
+                catalog_pts_2d[:,1].min(), catalog_pts_2d[:,1].max())
+            print("Observed range x,y:", observed_pts_2d[:,0].min(), observed_pts_2d[:,0].max(),
+                observed_pts_2d[:,1].min(), observed_pts_2d[:,1].max())
+
+            # 2) ground truth R/t
+            print("R_true:\n", sim_result['R_true'])
+            print("t_rover (sim):", sim_result['t_rover'])
+
+            # 3) compute an explicit "apply ground truth" using the apply_similarity helper
+            # Use the same apply_similarity used by the algorithm to avoid mismatch:
+            X_true = apply_similarity(observed_pts_2d, 1.0, sim_result['R_true'], sim_result['t_rover'])
+            print("X_true (first 5):\n", X_true[:5])
+            # distances between transformed observations and their true catalog matches
+            true_indices = sim_result['true_indices']
+            dists = [np.linalg.norm(X_true[i] - catalog_pts_2d[true_indices[i]]) for i in range(len(true_indices))]
+            print("Ground truth residuals (first 10):", dists[:10])
+            print("Median ground-truth residual:", np.median(dists))
+
+            # 4) raw triangle invariants (continuous) for one seed
+            oi, oj, ok = 0, 1, 2
+            def raw_invariant(a,b,c):
+                d1 = np.linalg.norm(a-b); d2 = np.linalg.norm(b-c); d3 = np.linalg.norm(c-a)
+                s = sorted([d1,d2,d3])
+                return (s[0]/s[2], s[1]/s[2])
+            print("Raw obs invariant (continuous):", raw_invariant(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]))
+            ci, cj, ck = true_indices[:3]
+            print("Raw cat invariant (continuous):", raw_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck]))
+            print("Quantized obs:", quantized_invariant(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok], binsize=binsize))
+            print("Quantized cat:", quantized_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize=binsize))
+
+            # 5) check if the obs invariant exists in the hash (and how many entries)
+            inv_obs = quantized_invariant(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok], binsize=binsize)
+            print("Inv_obs in hash?:", inv_obs in hash_index, " entries:", len(hash_index.get(inv_obs, [])))
+            print("=== END DIAGNOSTICS ===\n")
+        quick_diagnostics(sim_result, catalog_pts_2d, observed_pts_2d, binsize, hash_index, eps)
+
+    debug_pipeline()

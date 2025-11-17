@@ -56,10 +56,58 @@ def lat_lon_to_vector(lat_deg, lon_deg):
 
 #     return catalog
 
-def build_catalog(n=1000, seed=0, region=None, mars_radius_km=3390.0):
+# def build_catalog(n=1000, seed=0, region=None, mars_radius_km=3390.0):
+#     rng = np.random.RandomState(seed)
+
+#     # --- 1. Random lat/lon points ---
+#     if region is None:
+#         lats = rng.uniform(-90, 90, size=n)
+#         lons = rng.uniform(-180, 180, size=n)
+#     else:
+#         lat_min, lat_max, lon_min, lon_max = region
+#         lats = rng.uniform(lat_min, lat_max, size=n)
+#         lons = rng.uniform(lon_min, lon_max, size=n)
+
+#     reflectance = np.round(rng.uniform(0.1, 1.0, size=n), 3)
+
+#     # --- 2. Convert to 3D coordinates on Mars (in km) ---
+#     vecs_unit = lat_lon_to_vector(lats, lons)
+#     vecs = vecs_unit * mars_radius_km  # scale to Mars radius
+
+#     # --- 3. Reference tangent plane ---
+#     ref_lat = np.mean(lats)
+#     ref_lon = np.mean(lons)
+#     ref_vec = lat_lon_to_vector(np.array([ref_lat]), np.array([ref_lon]))[0] * mars_radius_km
+
+#     up = ref_vec / np.linalg.norm(ref_vec)
+#     east = np.cross([0, 0, 1], up)
+#     if np.linalg.norm(east) < 1e-6:  # handle poles
+#         east = np.cross([0, 1, 0], up)
+#     east /= np.linalg.norm(east)
+#     north = np.cross(up, east)
+
+#     # --- 4. Project to local tangent plane ---
+#     catalog = []
+#     for i in range(n):
+#         v = vecs[i] - ref_vec
+#         x = float(np.dot(v, east))
+#         y = float(np.dot(v, north))
+#         catalog.append({
+#             "id": int(i + 1),
+#             "lat_deg": float(lats[i]),
+#             "lon_deg": float(lons[i]),
+#             "reflectance": float(reflectance[i]),
+#             "x": x,
+#             "y": y
+#         })
+
+#     return catalog
+
+# Simplify build_catalog to just store lat/lon:
+
+def build_catalog(n=1000, seed=0, region=None):
     rng = np.random.RandomState(seed)
 
-    # --- 1. Random lat/lon points ---
     if region is None:
         lats = rng.uniform(-90, 90, size=n)
         lons = rng.uniform(-180, 180, size=n)
@@ -70,39 +118,16 @@ def build_catalog(n=1000, seed=0, region=None, mars_radius_km=3390.0):
 
     reflectance = np.round(rng.uniform(0.1, 1.0, size=n), 3)
 
-    # --- 2. Convert to 3D coordinates on Mars (in km) ---
-    vecs_unit = lat_lon_to_vector(lats, lons)
-    vecs = vecs_unit * mars_radius_km  # scale to Mars radius
-
-    # --- 3. Reference tangent plane ---
-    ref_lat = np.mean(lats)
-    ref_lon = np.mean(lons)
-    ref_vec = lat_lon_to_vector(np.array([ref_lat]), np.array([ref_lon]))[0] * mars_radius_km
-
-    up = ref_vec / np.linalg.norm(ref_vec)
-    east = np.cross([0, 0, 1], up)
-    if np.linalg.norm(east) < 1e-6:  # handle poles
-        east = np.cross([0, 1, 0], up)
-    east /= np.linalg.norm(east)
-    north = np.cross(up, east)
-
-    # --- 4. Project to local tangent plane ---
     catalog = []
     for i in range(n):
-        v = vecs[i] - ref_vec
-        x = float(np.dot(v, east))
-        y = float(np.dot(v, north))
         catalog.append({
             "id": int(i + 1),
             "lat_deg": float(lats[i]),
             "lon_deg": float(lons[i]),
-            "reflectance": float(reflectance[i]),
-            "x": x,
-            "y": y
+            "reflectance": float(reflectance[i])
         })
 
     return catalog
-
 
 def build_mars_catalog(n=1000, region=None, seed=0, mars_radius_km=3390.0, elev_range_km=(-2, 5)):
     """

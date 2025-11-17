@@ -101,79 +101,80 @@ import numpy as np
 def simulate_observations_with_pose(
     catalog, num_true=8, num_false=4, noise_deg=0.01, seed=0
 ):
-    """
-    Simulate rover landmark observations with realistic geometry and false detections.
-
-    Args:
-        catalog: list of dicts with 'x', 'y' fields for landmark positions (global frame)
-        num_true: number of true (visible) landmarks to select (closest ones)
-        num_false: number of false (spurious) landmarks to simulate
-        noise_deg: Gaussian angular noise standard deviation (degrees)
-        seed: random seed
-
-    Returns:
-        dict with:
-            observed_vectors: (N,2) array of observed landmark vectors in rover frame
-            true_indices: list of indices of true landmarks in the catalog
-            R_true: 2×2 rotation matrix of rover
-            t_rover: 2×1 translation (rover position in global coords)
-    """
     rng = np.random.RandomState(seed)
     n_catalog = len(catalog)
     if n_catalog == 0:
         raise ValueError("Catalog is empty")
-
-    # --- 1. Generate random rover position and attitude on Mars ---
-    rover_lat = rng.uniform(-70, 70)
-    rover_lon = rng.uniform(-160, 160)
-    theta = rng.uniform(-np.pi, np.pi)  # random yaw
+    
+    # --- 1. Generate random rover position within catalog region ---
+    cat_xy = np.stack([[d['lon_deg'], d['lat_deg']] for d in catalog], axis=0)
+    
+    # Get catalog bounds
+    lat_min, lat_max = cat_xy[:, 1].min(), cat_xy[:, 1].max()
+    lon_min, lon_max = cat_xy[:, 0].min(), cat_xy[:, 0].max()
+    
+    # Add some margin (10% of region size) so rover can be near edges
+    lat_margin = (lat_max - lat_min) * 0.1
+    lon_margin = (lon_max - lon_min) * 0.1
+    
+    rover_lat = rng.uniform(lat_min + lat_margin, lat_max - lat_margin)
+    rover_lon = rng.uniform(lon_min + lon_margin, lon_max - lon_margin)
+    
+    theta = rng.uniform(-np.pi, np.pi)
     c, s = np.cos(theta), np.sin(theta)
-    R2 = np.array([[c, -s],
-                   [s,  c]])  # rotation matrix
+    R2 = np.array([[c, -s], [s,  c]])
     t_rover = np.array([rover_lon, rover_lat])
     print(f"Rover position (lon, lat): {t_rover}, heading: {np.degrees(theta):.2f}°")
-
-    # --- 2. Select n closest catalog landmarks ---
-    cat_xy = np.stack([[d['lon_deg'], d['lat_deg']] for d in catalog], axis=0)
+    
+    # --- 2. Select closest catalog landmarks ---
     dists = np.linalg.norm(cat_xy - t_rover, axis=1)
     closest_idx = np.argsort(dists)[:min(num_true, n_catalog)]
     true_points = cat_xy[closest_idx]
     print(f"Selected true landmark indices: {closest_idx}")
-
-    # --- 3. Simulate m false landmarks with same mean & median as true ones ---
-    true_mean = np.mean(true_points, axis=0)
-    true_median = np.median(true_points, axis=0)
-    # generate around mean ± 10% random spread
-    # false_r = rng.uniform(0.5, 1.5, size=num_false)  # random distance from rover
-    # false_theta = rng.uniform(0, 2*np.pi, size=num_false)  # random angle
-    # false_pts = np.column_stack([
-    #     false_r * np.cos(false_theta),
-    #     false_r * np.sin(false_theta)
-    # ])
-    spread = np.mean(np.linalg.norm(true_points - true_mean, axis=1))
-    false_pts = rng.normal(loc=true_mean, scale=spread, size=(num_false, 2))
-    # --- 4. Add noise to true observations ---
+    print(f"Max observation distance: {dists[closest_idx].max():.2f}°")
+    
+    # --- 3. Transform to rover local frame ---
+    true_local = (true_points - t_rover) @ R2.T
+    
+    # --- 4. Generate false landmarks ---
+    r_true = np.linalg.norm(true_local, axis=1)
+    spread = np.mean(r_true) if len(r_true) > 0 else 1.0
+    false_r = rng.uniform(0.5*spread, 1.5*spread, size=num_false)
+    false_theta = rng.uniform(0, 2*np.pi, size=num_false)
+    false_pts = np.column_stack([
+        false_r * np.cos(false_theta),
+        false_r * np.sin(false_theta)
+    ])
+    
+    # --- 5. Add noise to true observations ---
     sigma_rad = np.deg2rad(noise_deg)
     observed_true = []
-    for p in true_points:
-        # transform to rover local frame
-        rel = p - t_rover
-        rel_cam = rel @ R2.T
-        # add small angular noise
-        r = np.linalg.norm(rel_cam)
-        angle = np.arctan2(rel_cam[1], rel_cam[0]) + rng.normal(0, sigma_rad)
+    for p in true_local:
+        r = np.linalg.norm(p)
+        angle = np.arctan2(p[1], p[0]) + rng.normal(0, sigma_rad)
         observed_true.append([r * np.cos(angle), r * np.sin(angle)])
     observed_true = np.array(observed_true)
-
+    
     # --- Combine true + false ---
-    observed_all = np.vstack([observed_true, false_pts])
-
+    lat_lon_vectors = np.vstack([observed_true, false_pts])
+    
+    # --- Convert to km using ref_lat=0.0 (equator) ---
+    ref_lat = 0.0
+    deg_to_km_lat = 111.0
+    deg_to_km_lon = 111.0 * np.cos(np.deg2rad(ref_lat))  # = 111.0
+    
+    km_vectors = np.column_stack([
+        lat_lon_vectors[:,0] * deg_to_km_lon,
+        lat_lon_vectors[:,1] * deg_to_km_lat
+    ])
+    
     return {
-        "observed_vectors": observed_all,
+        "observed_vectors": km_vectors,
+        "lat_lon_vectors": lat_lon_vectors,
         "true_indices": list(closest_idx),
         "R_true": R2,
         "t_rover": t_rover,
-        "n_false" : num_false
+        "n_false": num_false
     }
 
 def simulate_identity_observations(catalog, num_true=8, seed=0):

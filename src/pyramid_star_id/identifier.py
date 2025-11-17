@@ -1,238 +1,400 @@
 import numpy as np
 import itertools
+from sklearn.neighbors import KDTree
+from tqdm import tqdm
 
-def catalog_to_pts2d(catalog):
-    return np.stack([[c['x'], c['y']] for c in catalog], axis=0).astype(np.float32)
+def quant(x, binsize=0.01):
+    return int(np.floor(x / binsize))
 
-def triangle_invariants(p1, p2, p3):
-    d12 = np.linalg.norm(p1 - p2)
-    d13 = np.linalg.norm(p1 - p3)
-    d23 = np.linalg.norm(p2 - p3)
-    if min(d12, d13, d23) < 1e-9:
-        return None
-    ratios = sorted([d12/d13, d23/d13])
-    return (round(ratios[0], 3), round(ratios[1], 3))
 
-def build_geometric_hash_from_pts(catalog_pts_2d):
-    table = {}
-    n = len(catalog_pts_2d)
-    for i, j, k in itertools.combinations(range(n), 3):
-        inv = triangle_invariants(catalog_pts_2d[i], catalog_pts_2d[j], catalog_pts_2d[k])
-        if inv is None:
-            continue
-        table.setdefault(inv, []).append((i, j, k))
-    return table
+# Then in catalog_to_pts2d, convert to km at a reference latitude:
+def catalog_to_pts2d(catalog, ref_lat=0.0):
+    """Convert catalog to km using simple projection at reference latitude."""
+    deg_to_km_lat = 111.0
+    deg_to_km_lon = 111.0 * np.cos(np.deg2rad(ref_lat))
+    
+    pts = np.array([[c['lon_deg'], c['lat_deg']] for c in catalog], dtype=np.float32)
+    pts_km = pts * np.array([deg_to_km_lon, deg_to_km_lat])
+    
+    return pts_km
+
+def greedy_unique_matches(dists, idxs, eps):
+    """
+    Given dists: (N,) distances from transformed observations to nearest catalog points
+          idxs:  (N,) nearest catalog indices for each obs
+    Return:
+        inlier_mask: boolean mask of chosen inliers (obs -> unique catalog)
+        chosen_cat_for_obs: length-N array of catalog indices (or -1)
+        chosen_distances: length-N array of distances (or np.inf)
+    Greedy policy: sort candidate obs by distance ascending, assign each obs
+    only if its catalog wasn't already taken and distance <= eps.
+    """
+    N = len(idxs)
+    chosen_cat_for_obs = -np.ones(N, dtype=int)
+    chosen_distances = np.full(N, np.inf)
+    inlier_mask = np.zeros(N, dtype=bool)
+
+    # Create candidate list of (dist, obs_idx, cat_idx)
+    cand = [(float(dists[i]), i, int(idxs[i])) for i in range(N)]
+    cand.sort(key=lambda x: x[0])
+
+    taken_cats = set()
+    for dist, obs_i, cat_i in cand:
+        if dist <= eps and cat_i not in taken_cats:
+            taken_cats.add(cat_i)
+            chosen_cat_for_obs[obs_i] = cat_i
+            chosen_distances[obs_i] = dist
+            inlier_mask[obs_i] = True
+
+    return inlier_mask, chosen_cat_for_obs, chosen_distances
+
+
+def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, return_assigned=False):
+    """
+    Nearest-neighbor scoring but enforce unique correspondences greedily.
+    Returns: inlier_count, inlier_mask, rms, all_dists, assigned_idxs
+    """
+    X = apply_similarity(obs_pts, s, R, t)
+    if tree is None:
+        tree = KDTree(cat_pts)
+    dists, idxs = tree.query(X, k=1)
+    dists = dists[:, 0]
+    idxs = idxs[:, 0]
+
+    inlier_mask, chosen_cat_for_obs, chosen_dists = greedy_unique_matches(dists, idxs, eps)
+
+    inlier_count = int(inlier_mask.sum())
+    if inlier_count > 0:
+        rms = np.sqrt(np.mean(chosen_dists[inlier_mask] ** 2))
+    else:
+        rms = np.inf
+
+    # For ease of later processing: assigned_idxs gives -1 for unmatched obs
+    # return inlier_count, inlier_mask, rms, dists, chosen_cat_for_obs
+    if return_assigned:
+        return inlier_count, inlier_mask, rms, chosen_dists, chosen_cat_for_obs
+    else:
+        return inlier_count, inlier_mask, rms, dists, chosen_cat_for_obs
+
+def invariant_neighbors(inv, radius=1):
+    """
+    Generate neighboring invariant keys within ±radius for each dimension.
+    """
+    if inv is None:
+        return []
+    dims = len(inv)
+    deltas = list(itertools.product(range(-radius, radius + 1), repeat=dims))
+    return [tuple(inv[i] + d[i] for i in range(dims)) for d in deltas]
+
 
 def apply_similarity(pts, s, R, t):
     return (s * (pts @ R.T)) + t
 
-from sklearn.neighbors import KDTree
+def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, tree=None, eps_refine=10.0):
+    """
+    Refit similarity transform using unique correspondences from the current transform.
+    Steps:
+      - Transform all observations using current transform
+      - Find greedy unique NN matches within eps_refine
+      - Fit Procrustes on matched pairs (obs -> cat)
+    """
+    _, inliers, _, _, assigned = score_transform_with_rms(
+         obs_pts, cat_pts, s, R, t, tree, eps_refine, return_assigned=True
+    )
 
-def score_transform(obs_pts, cat_pts, s, R, t, eps=2.0):
-    X = apply_similarity(obs_pts, s, R, t)
-    tree = KDTree(cat_pts)
-    dists, _ = tree.query(X, k=1)
-    inliers = (dists[:,0] <= eps)
-    return int(inliers.sum()), inliers
+    idxs_obs = np.where(inliers)[0]
+    if len(idxs_obs) < 2:
+        return s, R, t
 
-def refine_similarity(obs_pts, cat_pts, inliers, s, R, t):
-    # Build matched pairs using nearest neighbors for inliers
-    X = apply_similarity(obs_pts[inliers], s, R, t)
-    tree = KDTree(cat_pts)
-    _, idxs = tree.query(X, k=1)
-    Y = cat_pts[idxs[:,0]]
+    A = obs_pts[idxs_obs]
+    B = cat_pts[assigned[idxs_obs]]
 
-    ca, cb = X.mean(axis=0), Y.mean(axis=0)
-    X0, Y0 = X - ca, Y - cb
-    na, nb = np.linalg.norm(X0), np.linalg.norm(Y0)
-    if na < 1e-9 or nb < 1e-9:
+    ca = A.mean(axis=0)
+    cb = B.mean(axis=0)
+    A0 = A - ca
+    B0 = B - cb
+    na = np.linalg.norm(A0)
+    nb = np.linalg.norm(B0)
+    if na < 1e-12 or nb < 1e-12:
         return s, R, t
     s_new = nb / na
-    H = X0.T @ Y0
+    H = A0.T @ B0
     U, _, Vt = np.linalg.svd(H)
-    R_new = U @ Vt
+    R_new = Vt.T @ U.T
     if np.linalg.det(R_new) < 0:
         Vt[-1, :] *= -1
-        R_new = U @ Vt
+        R_new = Vt.T @ U.T
     t_new = cb - s_new * (R_new @ ca)
+
     return s_new, R_new, t_new
+
 
 def estimate_similarity_from_triangle(A, B):
     ca, cb = A.mean(axis=0), B.mean(axis=0)
     A0, B0 = A - ca, B - cb
 
-    # Step 2: scale from Frobenius norms
     na = np.linalg.norm(A0)
     nb = np.linalg.norm(B0)
     if na < 1e-9 or nb < 1e-9:
         return None
     s = nb / na
 
-    # Step 3: rotation via 2D Procrustes
+    # Correct Kabsch: H = A0^T B0, U S Vt = svd(H), R = Vt.T @ U.T
     H = A0.T @ B0
     U, _, Vt = np.linalg.svd(H)
-    R = U @ Vt
+    R = Vt.T @ U.T
+
     # Ensure proper rotation (det = +1)
     if np.linalg.det(R) < 0:
+        # fix reflection: flip last column of Vt (equivalently multiply V by diag(1, ..., -1))
         Vt[-1, :] *= -1
-        R = U @ Vt
+        R = Vt.T @ U.T
 
-    # Step 4: translation
     t = cb - s * (R @ ca)
-
     return s, R, t
 
-# def identify_geometric(catalog_pts_2d, observed_pts_2d,
-#                        hash_index=None, eps=2.0, max_hypotheses=20000):
-#     if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
-#         raise ValueError("catalog_pts_2d must be a (N,2) ndarray")
-#     if not isinstance(observed_pts_2d, np.ndarray) or observed_pts_2d.shape[1] != 2:
-#         raise ValueError("observed_pts_2d must be a (M,2) ndarray")
 
-#     if hash_index is None:
-#         hash_index = build_geometric_hash_from_pts(catalog_pts_2d)
+# --- Replace quantized_invariant with the full 5-dim descriptor ---
+def quantized_invariant(p, q, r, binsize=0.01):
+    """
+    Permutation- and scale-invariant triangle descriptor built from sorted side lengths:
+    - ratio1 = a/c, ratio2 = b/c
+    - angle_a, angle_b: angles opposite sides a and b (via law of cosines, normalized by pi)
+    - area_norm = area / c^2 (Heron’s formula for area, then normalize)
+    Returns a 5-tuple of quantized integers.
+    """
+    # Side lengths
+    d1 = np.linalg.norm(p - q)
+    d2 = np.linalg.norm(q - r)
+    d3 = np.linalg.norm(r - p)
 
-#     best = None
-#     hypotheses = 0
+    # Reject degenerate triangles early
+    lengths = np.array([d1, d2, d3], dtype=np.float64)
+    if np.any(lengths < 1e-9):
+        return None
 
-#     for oi, oj, ok in itertools.combinations(range(len(observed_pts_2d)), 3):
-#         inv = triangle_invariants(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok])
-#         if inv is None or inv not in hash_index:
-#             continue
+    # Sort sides so a <= b <= c (perm-invariant base)
+    a, b, c = np.sort(lengths)
 
-#         for (ci, cj, ck) in hash_index[inv]:
-#             # Ensure indices are valid
-#             if max(ci, cj, ck) >= len(catalog_pts_2d):
-#                 continue
+    # Ratios (scale-invariant)
+    ratio1 = a / c
+    ratio2 = b / c
 
-#             A = np.stack([observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]], axis=0)
-#             B = np.stack([catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck]], axis=0)
+    # Internal angles opposite a and b using sorted sides
+    def safe_arccos(num, den):
+        if den < 1e-12:
+            return 0.0
+        x = np.clip(num / den, -1.0, 1.0)
+        return np.arccos(x)
 
-#             est = estimate_similarity_from_triangle(A, B)
-#             if est is None:
-#                 continue
-#             s, R, t = est
+    # angle opposite a
+    angle_a = safe_arccos(b**2 + c**2 - a**2, 2.0 * b * c) / np.pi  # normalize to [0,1]
+    # angle opposite b
+    angle_b = safe_arccos(a**2 + c**2 - b**2, 2.0 * a * c) / np.pi
 
-#             in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
-#             if best is None or in_cnt > best['inlier_count']:
-#                 s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers, s, R, t)
-#                 in_cnt_ref, inliers_ref = score_transform(observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, eps=eps)
+    # Area via Heron’s formula (perm-invariant), then normalize by c^2
+    s = 0.5 * (a + b + c)  # semiperimeter
+    area_sq = max(s * (s - a) * (s - b) * (s - c), 0.0)
+    area = np.sqrt(area_sq)
+    area_norm = area / (c**2 + 1e-12)
 
-#                 # Optional: collect matches (nearest neighbors for inliers)
-#                 from sklearn.neighbors import KDTree
-#                 X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
-#                 tree = KDTree(catalog_pts_2d)
-#                 dists, idxs = tree.query(X, k=1)
-#                 matches = [(int(idxs[i,0]), int(i), float(dists[i,0])) for i in range(len(X)) if inliers_ref[i]]
+    return (
+        quant(ratio1, binsize),
+        quant(ratio2, binsize),
+        quant(angle_a, binsize),
+        quant(angle_b, binsize),
+        quant(area_norm, binsize),
+    )
 
-#                 best = {
-#                     's': s_ref, 'R': R_ref, 't': t_ref,
-#                     'inlier_count': in_cnt_ref,
-#                     'inliers': inliers_ref,
-#                     'matches': matches,
-#                     'seed_obs_triangle': (oi, oj, ok),
-#                     'seed_cat_triangle': (ci, cj, ck)
-#                 }
+# --- helper: canonical vertex ordering for a triangle ---
+def canonical_triangle_vertex_order(pts3):
+    """
+    Given pts3: (3,2) array for vertices [p,q,r] in that index order,
+    return an index ordering [idx_opposite_a, idx_opposite_b, idx_opposite_c]
+    where a<=b<=c are sorted side lengths and idx_opposite_* are the indices
+    of the vertices opposite those sides.
+    This ordering is deterministic and maps to the invariant's sorted-side convention.
+    """
+    # pts3 assumed shape (3,2) corresponding to vertices [0,1,2] -> p,q,r
+    p, q, r = pts3[0], pts3[1], pts3[2]
+    # side lengths and which vertex they are opposite to:
+    # d(p,q) is opposite r -> index 2
+    d_pq = np.linalg.norm(p - q)
+    # d(q,r) opposite p -> index 0
+    d_qr = np.linalg.norm(q - r)
+    # d(r,p) opposite q -> index 1
+    d_rp = np.linalg.norm(r - p)
 
-#             hypotheses += 1
-#             if hypotheses >= max_hypotheses:
-#                 break
-#         if hypotheses >= max_hypotheses:
-#             break
+    lengths_with_opposite = [
+        (d_pq, 2),
+        (d_qr, 0),
+        (d_rp, 1)
+    ]
+    lengths_with_opposite.sort(key=lambda x: x[0])  # ascending a<=b<=c
+    # extract the vertex indices in order opposite a,b,c
+    ordered_vertices = [t[1] for t in lengths_with_opposite]
+    return ordered_vertices  # length 3 list of indices in {0,1,2}
 
-#     return {
-#         'candidates': hypotheses,
-#         'best_solution': best
-#     }
-
+# --- build_geometric_hash_from_pts: store canonical-ordered triangles ---
+def build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01):
+    table = {}
+    n = len(catalog_pts_2d)
+    for i, j, k in itertools.combinations(range(n), 3):
+        pts3 = np.stack([catalog_pts_2d[i], catalog_pts_2d[j], catalog_pts_2d[k]], axis=0)
+        order = canonical_triangle_vertex_order(pts3)
+        # reorder indices to canonical (opposite-a, opposite-b, opposite-c)
+        ci, cj, ck = [ (i, j, k)[idx] for idx in order ]
+        inv = quantized_invariant(catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize)
+        if inv is None:
+            continue
+        table.setdefault(inv, []).append((ci, cj, ck))
+    return table
 
 def identify_geometric(sim_result, catalog,
-                       hash_index=None, eps=2.0, max_hypotheses=20000):
+                       hash_index=None,
+                       eps=8.0,
+                       binsize=0.02,
+                       ransac_iters=4000,
+                       inv_neighbor_radius=1,
+                       max_candidates_per_inv=40,
+                       min_seed_inliers=3,
+                       early_exit_fraction=0.70):
     """
-    Identify observed landmarks by geometric hashing against the global catalog.
+    Robust geometric hashing + RANSAC landmark identification using full 5-dim invariant
+    and canonical triangle vertex ordering so that triangle vertices correspond deterministically.
+    """
 
-    Args:
-        sim_result: dict from simulate_observations_with_pose()
-        catalog: list of dicts with 'x', 'y' keys
-        hash_index: precomputed geometric hash (optional)
-        eps: inlier tolerance (distance units match catalog, e.g., km)
-        max_hypotheses: max number of triangle hypotheses to test
-    Returns:
-        dict with best transformation, inliers, and matches
-    """
     # --- Extract data ---
-    if type(catalog) is list:
+    if isinstance(catalog, list):
         catalog_pts_2d = catalog_to_pts2d(catalog)
     else:
         catalog_pts_2d = catalog
 
-    observed_local = sim_result['observed_vectors']
-    R_true = sim_result['R_true']
-    t_rover = sim_result['t_rover']
+    observed_pts_2d = sim_result['observed_vectors']
 
-    # Convert observed (rover frame) → global coordinates
-    observed_pts_2d = observed_local @ R_true + t_rover
-
-    # --- Validate shapes ---
+    # Validate shapes (keep early errors)
     if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
         raise ValueError("catalog_pts_2d must be a (N,2) ndarray")
     if not isinstance(observed_pts_2d, np.ndarray) or observed_pts_2d.shape[1] != 2:
         raise ValueError("observed_pts_2d must be a (M,2) ndarray")
 
-    # --- Build geometric hash if missing ---
+    # --- Build hash if missing ---
     if hash_index is None:
-        hash_index = build_geometric_hash_from_pts(catalog_pts_2d)
+        hash_index = build_geometric_hash_from_pts(catalog_pts_2d, binsize=binsize)
+
+    obs_indices = np.arange(len(observed_pts_2d))
+    all_obs_tris = list(itertools.combinations(obs_indices, 3))
+    # cap observed triangles for speed if huge
+    if len(all_obs_tris) > 20000:
+        rng_cap = np.random.RandomState(42)
+        keep = rng_cap.choice(len(all_obs_tris), 20000, replace=False)
+        all_obs_tris = [all_obs_tris[i] for i in keep]
+
+    cat_tree = KDTree(catalog_pts_2d)
+    rng = np.random.RandomState(123)
 
     best = None
-    hypotheses = 0
+    eps_init = max(eps * 3.0, 20.0)
 
-    # --- Triangle-based geometric hashing loop ---
-    for oi, oj, ok in itertools.combinations(range(len(observed_pts_2d)), 3):
-        inv = triangle_invariants(observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok])
-        if inv is None or inv not in hash_index:
+    # RANSAC with tqdm
+    for _ in tqdm(range(ransac_iters), desc="RANSAC"):
+
+        # pick a random observed triangle (in original index order)
+        oi, oj, ok = all_obs_tris[rng.randint(0, len(all_obs_tris))]
+        obs_pts3 = np.stack([observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]], axis=0)
+
+        # canonicalize observed triangle vertex order
+        obs_order = canonical_triangle_vertex_order(obs_pts3)
+        o_a, o_b, o_c = [ (oi, oj, ok)[idx] for idx in obs_order ]
+        A = np.stack([observed_pts_2d[o_a], observed_pts_2d[o_b], observed_pts_2d[o_c]], axis=0)
+
+        # compute invariant on canonical ordering (permutation invariant anyway)
+        inv = quantized_invariant(A[0], A[1], A[2], binsize=binsize)
+        if inv is None:
             continue
 
-        for (ci, cj, ck) in hash_index[inv]:
-            if max(ci, cj, ck) >= len(catalog_pts_2d):
-                continue
+        # invariant neighbor keys
+        candidate_invs = invariant_neighbors(inv, radius=inv_neighbor_radius)
 
-            A = np.stack([observed_pts_2d[oi], observed_pts_2d[oj], observed_pts_2d[ok]], axis=0)
+        # collect catalog triangle candidates (they were stored canonical-ordered)
+        candidate_triangles = []
+        for key in candidate_invs:
+            tris = hash_index.get(key)
+            if tris:
+                # cap the number taken from this key
+                candidate_triangles.extend(tris[:max_candidates_per_inv])
+
+        if not candidate_triangles:
+            continue
+
+        rng.shuffle(candidate_triangles)
+
+        # try each candidate catalog triangle
+        for (ci, cj, ck) in candidate_triangles:
+            # B is already canonical-ordered during hash build
             B = np.stack([catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck]], axis=0)
 
             est = estimate_similarity_from_triangle(A, B)
             if est is None:
                 continue
+            s, Rm, t = est
 
-            s, R, t = est
-            in_cnt, inliers = score_transform(observed_pts_2d, catalog_pts_2d, s, R, t, eps=eps)
+            # sanity on scale
+            if not (0.05 <= s <= 20.0):
+                continue
 
-            if best is None or in_cnt > best['inlier_count']:
-                s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers, s, R, t)
-                in_cnt_ref, inliers_ref = score_transform(observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, eps=eps)
+            # coarse check with loose eps_init using RMS + unique matching
+            in_cnt_init, inliers_init, rms_init, dists_init, idxs_init = \
+                score_transform_with_rms(observed_pts_2d, catalog_pts_2d, s, Rm, t, cat_tree, eps=eps_init)
 
-                X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
-                tree = KDTree(catalog_pts_2d)
-                dists, idxs = tree.query(X, k=1)
-                matches = [(int(idxs[i, 0]), int(i), float(dists[i, 0])) for i in range(len(X)) if inliers_ref[i]]
+            if in_cnt_init < min_seed_inliers:
+                continue
 
+            # ensure seed vertices are among coarse inliers (use their canonical indices)
+            seed_obs_indices = [o_a, o_b, o_c]
+            if not (inliers_init[seed_obs_indices[0]] and inliers_init[seed_obs_indices[1]] and inliers_init[seed_obs_indices[2]]):
+                continue
+
+            # refine using unique NN assignment
+            s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers_init, s, Rm, t)
+
+            # final scoring with true eps
+            in_cnt, inliers, rms, dists, ransac_idxs = score_transform_with_rms(
+                observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, cat_tree, eps=eps)
+
+            if in_cnt < min_seed_inliers:
+                continue
+
+            # ensure seed still inliers
+            if not (inliers[seed_obs_indices[0]] and inliers[seed_obs_indices[1]] and inliers[seed_obs_indices[2]]):
+                continue
+
+            # build matches with greedy unique assignment
+            X = apply_similarity(observed_pts_2d, s_ref, R_ref, t_ref)
+            d_all, i_all = cat_tree.query(X, k=1)
+            d_all = d_all[:, 0]
+            i_all = i_all[:, 0]
+            
+            matches = [(ransac_idxs[i], i, dists[i]) for i in np.where(inliers)[0]]
+
+            # accept improvement
+            if best is None or (in_cnt > best['inlier_count'] or (in_cnt == best['inlier_count'] and rms < best.get('rms', np.inf))):
                 best = {
                     's': s_ref, 'R': R_ref, 't': t_ref,
-                    'inlier_count': in_cnt_ref,
-                    'inliers': inliers_ref,
+                    'inlier_count': in_cnt,
+                    'rms': rms,
+                    'inliers': inliers,
                     'matches': matches,
-                    'seed_obs_triangle': (oi, oj, ok),
-                    'seed_cat_triangle': (ci, cj, ck)
+                    'seed_obs_triangle': (o_a, o_b, o_c),
+                    'seed_cat_triangle': (ci, cj, ck),
                 }
 
-            hypotheses += 1
-            if hypotheses >= max_hypotheses:
-                break
-        if hypotheses >= max_hypotheses:
-            break
+            # early exit if we've matched a large fraction of expected true obs
+            if best is not None:
+                n_obs = len(observed_pts_2d)
+                expected_true = n_obs - sim_result.get('n_false', 0)
+                if best['inlier_count'] >= early_exit_fraction * expected_true:
+                    return {'best_solution': best}
 
-    return {
-        'candidates': hypotheses,
-        'best_solution': best
-    }
-def identify():
-    pass
+    return {'best_solution': best}
+
