@@ -1,51 +1,7 @@
-from pyramid_star_id import build_catalog, identify_geometric, simulate_observations_with_pose, catalog_to_pts2d
+from pyramid_star_id import build_catalog, identify_geometric, simulate_observations_with_pose, catalog_to_pts2d, save_catalog_csv
 import os
 import numpy as np
-
 import matplotlib.pyplot as plt
-import numpy as np
-
-# def plot_rover_scene(catalog, sim_result):
-#     """
-#     Plot the rover, catalog landmarks, and selected true + false landmarks.
-
-#     Args:
-#         catalog: list of dicts with 'x', 'y' entries.
-#         sim_result: dict returned from simulate_observations_with_pose().
-#     """
-#     # --- Extract data ---
-#     cat_xy = np.stack([[d['lon_deg'], d['lat_deg']] for d in catalog], axis=0)
-#     rover_pos = sim_result['t_rover']
-#     true_idx = sim_result['true_indices']
-#     num_false = sim_result["n_false"]
-
-#     # --- False points (if any) ---
-#     observed = sim_result.get('lat_lon_vectors', None) @ sim_result['R_true'] + sim_result['t_rover']
-
-#     # --- True landmarks (selected closest) ---
-#     n_true = len(true_idx)
-#     # true_points = observed[:n_true]
-#     # true_points = cat_xy[true_idx]
-#     true_points = observed[:n_true] 
-#     false_points = observed[n_true:]  if num_false > 0 else None
-#     print(true_points[5])
-#     print(cat_xy[5])
-
-#     # --- Plot ---
-#     plt.figure(figsize=(8, 8))
-#     plt.scatter(cat_xy[:, 0], cat_xy[:, 1], color='lightgray', label='Catalog landmarks', s=80)
-#     plt.scatter(true_points[:, 0], true_points[:, 1], color='dodgerblue', label='Selected landmarks', s=10)
-#     plt.scatter(rover_pos[0], rover_pos[1], color='red', marker='^', s=120, label='Rover position')
-#     if false_points is not None:
-#         plt.scatter(false_points[:, 0], false_points[:, 1], color='orange', marker='x', s=80, label='False landmarks')
-
-#     plt.xlabel("Longitude (deg)")
-#     plt.ylabel("Latitude (deg)")
-#     plt.title("Rover Scene: Catalog vs Selected Landmarks")
-#     plt.legend()
-#     plt.grid(True)
-#     plt.axis('equal')
-#     plt.show()
 
 def plot_rover_scene(catalog, sim_result):
     """
@@ -128,13 +84,16 @@ def plot_rover_scene(catalog, sim_result):
 
 def main():
     print('Building catalog...')
-    catalog = build_catalog(n=200, seed=1, region=(-5, 5, -5, 5))
+    n = 200
+    region = (-5, 5, -5, 5)  # (lat_min, lat_max, lon_min, lon_max)
+    file_path = f'output/catalog_{n}_{region[1]-region[0]}_{region[3]-region[2]}.csv'
+    if os.path.exists(file_path):
+        print("File exists!")
+    else:
+        print("File does not exist.")
+    catalog = build_catalog(n=n, seed=1, region=region)
     # catalog_pts_2d = catalog_to_pts2d(catalog)
-    os.makedirs('output', exist_ok=True)
-    
-    print('Saving catalog...')
-    # save_catalog_csv(catalog, 'output/catalog.csv')
-    
+    os.makedirs('output', exist_ok=True)    
     
     print('Simulating observations...')
     sim = simulate_observations_with_pose(catalog, num_true=20, num_false=15, noise_deg=0.02, seed=2)
