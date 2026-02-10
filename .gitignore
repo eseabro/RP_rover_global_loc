@@ -47,6 +47,9 @@ qtcreator-*
 *.PNG
 *.pt
 *.jp2
+*.dae
+*.obj
+
 src/hirise_data/Gazebo-*/*
 src/hirise_data/labeled_gazebo/*
 src/hirise_data/rock_sim-*/*
