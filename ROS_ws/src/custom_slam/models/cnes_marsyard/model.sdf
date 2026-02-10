@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <model name="cnes_marsyard">
+    <static>true</static>
+
+    <link name="testlink">
+      <visual name="serom">
+        <geometry>
+          <mesh>
+            <uri>model://cnes_marsyard/meshes/model.dae</uri>
+            <submesh>
+              <name>serom</name>
+            </submesh>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1.0 1.0 1.0 1.0</diffuse>
+          <specular>0.0 0.0 0.0 1.0</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://cnes_marsyard/meshes/serom.1001.jpg</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+
+      <collision name="collision">
+        <geometry>
+          <mesh>
+             <uri>model://cnes_marsyard/meshes/model.dae</uri>
+          </mesh>
+        </geometry>
+        </collision>
+    </link>
+  </model>
+</sdf>

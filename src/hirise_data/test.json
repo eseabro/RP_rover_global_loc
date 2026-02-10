@@ -1,0 +1,15 @@
+{
+  "pipeline": [
+    {
+      "type": "readers.e57",
+      "filename": "/home/bernat/Documents/AUT-ERC-DEV/src/robot_sim/MarsYard_local.e57"
+    },
+    {
+      "type": "filters.merge"
+    },
+    {
+      "type": "writers.pcd",
+      "filename": "/home/bernat/Documents/AUT-ERC-DEV/src/robot_sim/MarsYard_full.pcd"
+    }
+  ]
+}

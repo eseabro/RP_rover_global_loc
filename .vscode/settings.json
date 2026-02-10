@@ -1,3 +1,12 @@
 {
-    "cmake.ignoreCMakeListsMissing": true
+    "python.autoComplete.extraPaths": [
+        "/home/ws/install/robot_sim/lib/python3.10/site-packages",
+        "/opt/ros/jazzy/lib/python3.10/site-packages",
+        "/opt/ros/jazzy/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/ws/install/custom_slam/lib/python3.10/site-packages",
+        "/opt/ros/jazzy/lib/python3.10/site-packages",
+        "/opt/ros/jazzy/local/lib/python3.10/dist-packages"
+    ]
 }

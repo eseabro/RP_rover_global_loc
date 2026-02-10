@@ -1,0 +1,61 @@
+# bridge_sensors.yaml
+- ros_topic_name: "scan"
+  gz_topic_name: "scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+  config:
+    frame_id: base_scan
+
+
+- ros_topic_name: "scan/points"
+  gz_topic_name: "scan/points"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "imu"
+  gz_topic_name: "imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+- gz_topic_name: "/right_camera/image_raw"
+  ros_topic_name: "/camera/right/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+
+- gz_topic_name: "/left_camera/image_raw"
+  ros_topic_name: "/camera/left/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+
+- gz_topic_name: "/right_camera/camera_info"
+  ros_topic_name: "/camera/right/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+
+- gz_topic_name: "/left_camera/camera_info"
+  ros_topic_name: "/camera/left/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+
+- ros_topic_name: "clock"
+  gz_topic_name: "clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+- gz_topic_name: "/ground_truth/odom"
+  ros_topic_name: "/ground_truth/odom"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS

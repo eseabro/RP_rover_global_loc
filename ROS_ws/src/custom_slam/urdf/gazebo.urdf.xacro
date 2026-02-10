@@ -1,14 +1,15 @@
 <?xml version="1.0"?>
+<robot name="my_robot" xmlns:xacro="http://wiki.ros.org/xacro">
 
-<robot xmlns:xacro="http://wiki.ros.org/xacro">
 
-  <!-- ROS 2 Control Configuration -->
+  <!-- ros2_control configuration -->
   <ros2_control name="GazeboSystem" type="system">
     <hardware>
-      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+      <!-- Gazebo Harmonic ros2_control hardware plugin -->
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
-    
-    <!-- Joints -->
+
+    <!-- Wheel joints (unchanged) -->
     <joint name="middle_wheel_joint_left">
       <command_interface name="velocity">
         <param name="min">-10</param>
@@ -68,7 +69,7 @@
       <state_interface name="effort"/>
     </joint>
 
-    <!-- Front and Rear Rotating Joints -->
+    <!-- Steering/rotating joints (unchanged) -->
     <joint name="front_wheel_joint_R">
       <command_interface name="position">
         <param name="min">-5</param>
@@ -125,43 +126,74 @@
       <state_interface name="effort"/>
     </joint>
 
+    <!-- Rocker-bogie joints -->
+    <joint name="rocker_bogie_joint_L_2">
+        <command_interface name="effort"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+    </joint>
+    <joint name="rocker_bogie_joint_R_2">
+        <command_interface name="effort"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+    </joint>
   </ros2_control>
 
-  <!-- Gazebo Plugin -->
-  <gazebo>
-    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
-      <parameters>$(find custom_slam)/config/controller_velocity.yaml</parameters>
-    </plugin>
-  </gazebo>
+  <!-- Gazebo Harmonic ros2_control system plugin -->
+<gazebo>
+  <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+    <parameters>$(find custom_slam)/config/controller_velocity.yaml</parameters>
+  </plugin>
+</gazebo> 
 
-  <!-- IMU Sensor -->
+<gazebo>
+  <plugin filename="gz-sim-odometry-publisher-system"
+          name="gz::sim::systems::OdometryPublisher">
+    <!-- Frame IDs -->
+    <odom_frame>odom</odom_frame>
+    <robot_base_frame>base_footprint</robot_base_frame>
+    
+    <!-- Publishing settings -->
+    <odom_publish_frequency>50</odom_publish_frequency>
+    <odom_topic>/ground_truth/odom</odom_topic>
+    
+    <!-- Ground truth mode - no noise or drift -->
+    <xyz_offset>0 0 0</xyz_offset>
+    <rpy_offset>0 0 0</rpy_offset>
+    
+    <!-- Gaussian noise (set to 0 for perfect ground truth) -->
+    <gaussian_noise>0.0</gaussian_noise>
+  </plugin>
+</gazebo>
+
+  <!-- Sensors (URDF -> SDF extension through <gazebo reference="...">) -->
+
+  <!-- IMU on imu_link -->
   <gazebo reference="imu_link">
-    <gravity>true</gravity>
-    <sensor name="imu_sensor" type="imu">
+    <sensor name="tb3_imu" type="imu">
       <always_on>true</always_on>
-      <update_rate>100</update_rate>
-      <visualize>true</visualize>
-      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
-        <topicName>imu</topicName>
-        <bodyName>imu_link</bodyName>
-        <updateRateHZ>100.0</updateRateHZ>
-        <gaussianNoise>0.0</gaussianNoise>
-        <xyzOffset>0 0 0</xyzOffset>
-        <rpyOffset>0 0 0</rpyOffset>
-        <frameName>imu_link</frameName>
-        <initialOrientationAsReference>false</initialOrientationAsReference>
-      </plugin>
+      <update_rate>200</update_rate>
+      <topic>imu</topic>
+      <gz_frame_id>imu_link</gz_frame_id>
+      <frame_id>imu_link</frame_id>
+      <!-- Optional: orientation reference / noise can be added here -->
     </sensor>
   </gazebo>
 
-  <!-- LiDAR Sensor
-  <gazebo reference="lidar_link">
-    <sensor type="ray" name="lidar_sensor">
+  <!-- GPU LiDAR on lidar_link -->
+  <!-- <gazebo reference="base_scan">
+    <sensor type="gpu_lidar" name="lidar_sensor">
       <always_on>true</always_on>
-      <pose>0 0 0 0 0 0</pose>
-      <update_rate>20.0</update_rate>
       <visualize>true</visualize>
-      <ray>
+      <pose>-0.064 0 0.121 0 0 0</pose>
+      <update_rate>20</update_rate>
+      <topic>scan</topic>
+      <!- Header frame id used in gz msgs; bridge to ROS if needed ->
+      <frame_id>base_scan</frame_id>
+      <gz_frame_id>base_scan</gz_frame_id>
+      <lidar>
         <scan>
           <horizontal>
             <samples>360</samples>
@@ -172,19 +204,61 @@
         </scan>
         <range>
           <min>0.2</min>
-          <max>30.0</max>
-          <resolution>0.01</resolution>
+          <max>10.0</max>
+          <resolution>1</resolution>
         </range>
-      </ray>
-    <plugin name="scan" filename="libgazebo_ros_laser.so">
-      <bodyName>scan</bodyName>
-      <topicName>scan</topicName> Topic for publishing scan data
-      <frameName>lidar_link</frameName> Reference frame
-    </plugin>
+      </lidar>
+      <ros>
+        <frame_name>base_scan</frame_name>
+      </ros>
     </sensor>
   </gazebo> -->
 
-  <!-- Camera Sensor -->
+<gazebo reference="left_camera_frame">
+    <sensor name="left_camera" type="camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <topic>left_camera/image_raw</topic>
+        <gz_frame_id>left_camera_optical_frame</gz_frame_id>
+        <frame_id>left_camera_optical_frame</frame_id>
+        <camera>
+            <horizontal_fov>1.0472</horizontal_fov>
+            <image>
+                <width>2304</width>
+                <height>1296</height>
+                <format>R8G8B8</format>
+            </image>
+            <clip>
+                <near>0.01</near>
+                <far>100</far>
+            </clip>
+        </camera>
+    </sensor>
+</gazebo>
+
+<gazebo reference="right_camera_frame">
+    <sensor name="right_camera" type="camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <topic>right_camera/image_raw</topic>
+        <gz_frame_id>right_camera_optical_frame</gz_frame_id>
+        <frame_id>right_camera_optical_frame</frame_id>
+        <camera>
+            <horizontal_fov>1.0472</horizontal_fov>
+            <anti_aliasing>0</anti_aliasing>
+            <image>
+                <width>2304</width> 
+                <height>1296</height>
+                <format>R8G8B8</format>
+            </image>
+            <clip>
+                <near>0.01</near>
+                <far>100</far>
+            </clip>
+        </camera>
+    </sensor>
+</gazebo>
+
 
 
 </robot>

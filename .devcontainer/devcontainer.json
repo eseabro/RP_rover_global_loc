@@ -1,0 +1,53 @@
+{
+    "name": "RP Rover Global Localization Dev Container",
+    "privileged": true,
+    "remoteUser": "bernat",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "USERNAME": "bernat"
+        }
+    },
+    "workspaceFolder": "/home/ws",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
+    "customizations": {
+        "vscode": {
+            "extensions":[
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "twxs.cmake",
+                "donjayamanne.python-extension-pack",
+                "eamodio.gitlens",
+                "ms-iot.vscode-ros"
+            ]
+        }
+    },
+    "runArgs": [
+        "--network=host",
+        "--gpus=all",
+        "--env=DISPLAY",
+        "--env=NVIDIA_DRIVER_CAPABILITIES=all",
+        "--env=QT_X11_NO_MITSHM=1",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--volume=/usr/share/egl:/usr/share/egl:ro",
+        "--volume=/usr/share/glvnd:/usr/share/glvnd:ro",
+        "--volume=/usr/share/nvidia:/usr/share/nvidia:ro",
+        "--volume=/usr/share/vulkan:/usr/share/vulkan:ro",
+        "--device=/dev/dri"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY:-:0}",
+        "QT_X11_NO_MITSHM": "1",
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
+        "QT_XCB_GL_INTEGRATION": "egl",
+        "GLX_VENDOR_LIBRARY_NAME":"nvidia",
+        "EGL_VENDOR_LIBRARY_FILENAMES":"/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+    },
+
+    // "mounts": [
+    //    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+    // ],
+
+
+    "postCreateCommand": "sudo rosdep update && sudo rosdep install --from-paths src --ignore-src -y && sudo chown -R $(whoami) /home/ws/ && echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ros/jazzy/lib' >> ~/.bashrc"
+}

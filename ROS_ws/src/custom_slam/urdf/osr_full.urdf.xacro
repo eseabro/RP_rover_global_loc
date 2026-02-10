@@ -22,7 +22,7 @@
 
     <xacro:include filename="$(find custom_slam)/urdf/gazebo.urdf.xacro"/>
     <xacro:include filename="$(find custom_slam)/urdf/insert_transmission.urdf.xacro"/>
-    <xacro:include filename="$(find custom_slam)/urdf/realsense.xacro"/>
+    <!-- <xacro:include filename="$(find custom_slam)/urdf/realsense.xacro"/> -->
 
     <link name="base_footprint"/>
     <link name="base_link">
@@ -495,17 +495,123 @@
 
     <link name="imu_link"></link>
 
-    <xacro:insert_velocity_transmission name="rear_wheel_joint_right"/>
-    <xacro:insert_velocity_transmission name="rear_wheel_joint_left"/>
-    <xacro:insert_velocity_transmission name="middle_wheel_joint_right"/>
-    <xacro:insert_velocity_transmission name="middle_wheel_joint_left"/>
-    <xacro:insert_velocity_transmission name="front_wheel_joint_right"/>
-    <xacro:insert_velocity_transmission name="front_wheel_joint_left"/>
+    <!-- <joint name="lidar_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="base_scan"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint> -->
 
-    <xacro:insert_position_transmission name="front_wheel_joint_R"/>
-    <xacro:insert_position_transmission name="front_wheel_joint_L"/>
-    <xacro:insert_position_transmission name="rear_wheel_joint_R"/>
-    <xacro:insert_position_transmission name="rear_wheel_joint_L"/>
+    <!-- <link name="base_scan"></link> -->
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="camera_link"/>
+        <origin xyz="0 0 0.5" rpy="0 0 0"/>
+    </joint>
+    <link name="camera_link"/>
 
+    <!-- LEFT CAMERA -->
+    <joint name="left_camera_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="left_camera_frame"/>
+        <origin xyz="0 0.035 0" rpy="0 0 0"/>  <!-- +35mm left -->
+    </joint>
+    <link name="left_camera_frame"/>
+
+    <joint name="left_camera_optical_joint" type="fixed">
+        <parent link="left_camera_frame"/>
+        <child link="left_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.570796 0 -1.570796"/>
+    </joint>
+    <link name="left_camera_optical_frame"/>
+
+    <!-- RIGHT CAMERA -->
+    <joint name="right_camera_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="right_camera_frame"/>
+        <origin xyz="0 -0.035 0" rpy="0 0 0"/>  <!-- -35mm right -->
+    </joint>
+    <link name="right_camera_frame"/>
+
+    <joint name="right_camera_optical_joint" type="fixed">
+        <parent link="right_camera_frame"/>
+        <child link="right_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.570796 0 -1.570796"/>
+    </joint>
+    <link name="right_camera_optical_frame"/>
+
+
+
+
+    <!-- <ros2_control name="RobotSystem" type="system">
+        <hardware>
+            <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </hardware>
+
+        <joint name="rear_wheel_joint_right">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="rear_wheel_joint_left">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="middle_wheel_joint_right">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="middle_wheel_joint_left">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="front_wheel_joint_right">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="front_wheel_joint_left">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+
+
+        <joint name="front_wheel_joint_R">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="front_wheel_joint_L">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="rear_wheel_joint_R">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="rear_wheel_joint_L">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+
+        <joint name="rocker_bogie_joint_L_2">
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
+        </joint>
+        <joint name="rocker_bogie_joint_R_2">
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
+        </joint>
+    </ros2_control> -->
 
 </robot>

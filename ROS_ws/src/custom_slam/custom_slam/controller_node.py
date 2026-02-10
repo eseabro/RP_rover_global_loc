@@ -7,7 +7,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry
-from tf_transformations import quaternion_from_euler
+from scipy.spatial.transform import Rotation as R
 from geometry_msgs.msg import TransformStamped, Quaternion
 import tf2_ros
 
@@ -16,7 +16,8 @@ class Controller(Node):
 
     ROVER_WHEEL_RADIUS = 0.068  # You may want to adjust this to 0.05 from odometry node param
     WHEEL_BASE = 0.332  # Use wheel_base param from odometry node
-
+    euler_angles = [0.1, 0.2, 0.3]
+    rot = R.from_euler('xyz', euler_angles)
     d1 = 0.177
     d2 = 0.310
     d3 = 0.274
@@ -132,7 +133,9 @@ class Controller(Node):
         odom_msg.pose.pose.position.y = self.y
         odom_msg.pose.pose.position.z = 0.0
 
-        quat = quaternion_from_euler(0, 0, self.theta)
+        euler = [0, 0, self.theta]
+        rot = R.from_euler('xyz', euler)
+        quat = rot.as_quat()
         odom_msg.pose.pose.orientation = Quaternion(
             x=quat[0], y=quat[1], z=quat[2], w=quat[3]
         )
@@ -152,7 +155,9 @@ class Controller(Node):
         t.transform.translation.y = self.y
         t.transform.translation.z = 0.0
 
-        quat = quaternion_from_euler(0, 0, self.theta)
+        euler = [0, 0, self.theta]
+        rot = R.from_euler('xyz', euler)
+        quat = rot.as_quat()
         t.transform.rotation = Quaternion(
             x=quat[0], y=quat[1], z=quat[2], w=quat[3]
         )
