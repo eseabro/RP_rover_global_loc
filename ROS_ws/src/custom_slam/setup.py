@@ -51,6 +51,7 @@ setup(
             'controller_node = custom_slam.controller_node:main',
             'controller_node_ackermann = custom_slam.controller_node_ackermann:main',
             'image_saver = custom_slam.image_saver:main',
+            'map_exporter = custom_slam.map_exporter:main'
             
         ],
     },

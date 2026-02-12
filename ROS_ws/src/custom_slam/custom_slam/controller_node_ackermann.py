@@ -32,7 +32,7 @@ class Controller(Node):
 
         self.motor_wheel_pub = self.create_publisher(Float64MultiArray, '/wheel_controller/commands', 1)
         self.servo_pub = self.create_publisher(JointTrajectory, '/servo_controller/joint_trajectory', 1)
-        self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
+        self.odom_pub = self.create_publisher(Odometry, '/calculated_odom', 10)
 
         self.sub = self.create_subscription(Twist, 'cmd_vel', self.msg_callback, 1)
         self.joint_sub = self.create_subscription(JointState, 'joint_states', self.joint_state_callback, 10)

@@ -26,6 +26,11 @@ def generate_launch_description():
         package='rover_perception',
         executable='yolo_detector',
     )
+    
+    exporter = Node(
+        package='custom_slam',
+        executable='map_exporter',
+    )
     # saver = Node(
     #     package='custom_slam',
     #     executable='image_saver',
@@ -43,7 +48,8 @@ def generate_launch_description():
     return LaunchDescription([
         robot,
         detector_node,
-        yolo_node
+        yolo_node,
+        exporter
         # saver
         # rviz_node
     ])

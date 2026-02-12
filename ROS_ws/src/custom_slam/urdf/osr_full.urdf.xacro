@@ -495,13 +495,14 @@
 
     <link name="imu_link"></link>
 
-    <!-- <joint name="lidar_joint" type="fixed">
+    <joint name="lidar_joint" type="fixed">
         <parent link="base_link"/>
         <child link="base_scan"/>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint> -->
+    </joint>
 
-    <!-- <link name="base_scan"></link> -->
+    <link name="base_scan"></link>
+    
     <joint name="camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="camera_link"/>

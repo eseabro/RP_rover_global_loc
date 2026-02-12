@@ -29,7 +29,7 @@ def generate_launch_description():
     world = os.path.join(
         get_package_share_directory('leo_gz_worlds'),
         'worlds',
-        'marsyard2020.sdf'
+        'marsyard2021.sdf'
     )
     # world = os.path.join(
     #     get_package_share_directory('custom_slam'),
@@ -88,7 +88,7 @@ def generate_launch_description():
             name='controller_node_ackermann',
             output='screen',
             parameters=[{'use_sim_time': use_sim_time,
-                         'publish_tf': True}]
+                         'publish_tf': False}]
             )
 
     xacro_file = os.path.join(get_package_share_directory('custom_slam'),

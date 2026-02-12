@@ -151,19 +151,16 @@
 <gazebo>
   <plugin filename="gz-sim-odometry-publisher-system"
           name="gz::sim::systems::OdometryPublisher">
-    <!-- Frame IDs -->
     <odom_frame>odom</odom_frame>
     <robot_base_frame>base_footprint</robot_base_frame>
     
-    <!-- Publishing settings -->
     <odom_publish_frequency>50</odom_publish_frequency>
     <odom_topic>/ground_truth/odom</odom_topic>
     
-    <!-- Ground truth mode - no noise or drift -->
+    <tf_topic>/tf</tf_topic> 
+
     <xyz_offset>0 0 0</xyz_offset>
     <rpy_offset>0 0 0</rpy_offset>
-    
-    <!-- Gaussian noise (set to 0 for perfect ground truth) -->
     <gaussian_noise>0.0</gaussian_noise>
   </plugin>
 </gazebo>
@@ -183,14 +180,14 @@
   </gazebo>
 
   <!-- GPU LiDAR on lidar_link -->
-  <!-- <gazebo reference="base_scan">
+  <gazebo reference="base_scan">
     <sensor type="gpu_lidar" name="lidar_sensor">
       <always_on>true</always_on>
       <visualize>true</visualize>
       <pose>-0.064 0 0.121 0 0 0</pose>
       <update_rate>20</update_rate>
       <topic>scan</topic>
-      <!- Header frame id used in gz msgs; bridge to ROS if needed ->
+      <!-- Header frame id used in gz msgs; bridge to ROS if needed -->
       <frame_id>base_scan</frame_id>
       <gz_frame_id>base_scan</gz_frame_id>
       <lidar>
@@ -201,6 +198,12 @@
             <min_angle>-3.14</min_angle>
             <max_angle>3.14</max_angle>
           </horizontal>
+          <vertical>
+            <samples>8</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.261799</min_angle>
+            <max_angle>0.0</max_angle>
+          </vertical>
         </scan>
         <range>
           <min>0.2</min>
@@ -212,7 +215,7 @@
         <frame_name>base_scan</frame_name>
       </ros>
     </sensor>
-  </gazebo> -->
+  </gazebo>
 
 <gazebo reference="left_camera_frame">
     <sensor name="left_camera" type="camera">
