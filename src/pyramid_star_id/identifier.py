@@ -19,6 +19,118 @@ def catalog_to_pts2d(catalog, ref_lat=0.0):
     
     return pts_km
 
+from sklearn.neighbors import KDTree # Ensure this is imported
+
+def build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, max_candidates_per_inv=40, k_neighbors=15):
+    """
+    Optimized Geometric Hash Builder using K-Nearest Neighbors.
+    Complexity: O(N * k^2) instead of O(N^3).
+    
+    Args:
+        k_neighbors: Only form triangles with the k nearest rocks. 
+                     This implicitly ignores triangles that are too large 
+                     for the rover to see at once.
+    """
+    pts = catalog_pts_2d
+    n = len(pts)
+
+    print(f"Building Hash for {n} points using {k_neighbors}-NN...")
+
+    # 1. Build KDTree for fast neighbor lookup
+    tree = KDTree(pts)
+    
+    # Query k+1 neighbors (because the point itself is the 1st neighbor)
+    # This returns indices of the closest k points for every point
+    _, indices = tree.query(pts, k=min(n, k_neighbors + 1))
+
+    # 2. Precompute distances (Only if N < 5000 to save RAM, otherwise calc on fly)
+    if n < 5000:
+        from scipy.spatial.distance import pdist, squareform
+        D = squareform(pdist(pts))
+        use_precomputed = True
+    else:
+        use_precomputed = False
+
+    table = {}
+    seen_triangles = set() # To avoid duplicates like (A,B,C) vs (B,A,C)
+
+    # 3. Iterate through every point 'i' and form triangles with its neighbors
+    for i in range(n):
+        # Get neighbors of i (excluding i itself, which is at index 0)
+        neighbors = indices[i, 1:]
+        
+        # Form triangles where 'i' is the anchor, plus 2 neighbors 'j' and 'k'
+        for j, k in itertools.combinations(neighbors, 2):
+            
+            # Sort indices to ensure uniqueness
+            # (We only want to hash triangle 1-5-9 once, not as 5-1-9, etc.)
+            tri_idxs = tuple(sorted((i, j, k)))
+            
+            if tri_idxs in seen_triangles:
+                continue
+            seen_triangles.add(tri_idxs)
+            
+            # --- Invariant Logic (Same as before) ---
+            if use_precomputed:
+                d_pq = D[tri_idxs[0], tri_idxs[1]]
+                d_qr = D[tri_idxs[1], tri_idxs[2]]
+                d_rp = D[tri_idxs[2], tri_idxs[0]]
+                lengths = np.array([d_pq, d_qr, d_rp])
+            else:
+                p1, p2, p3 = pts[tri_idxs[0]], pts[tri_idxs[1]], pts[tri_idxs[2]]
+                lengths = np.array([
+                    np.linalg.norm(p1-p2),
+                    np.linalg.norm(p2-p3),
+                    np.linalg.norm(p3-p1)
+                ])
+
+            if np.any(lengths < 1e-9):
+                continue
+            
+            # Find Canonical Order (a <= b <= c)
+            # We must map the sorted edges back to the original vertex indices
+            # Indices in tri_idxs are [A, B, C]
+            # Edges are [AB, BC, CA]
+            # Opposites: AB->C(2), BC->A(0), CA->B(1)
+            
+            # Re-calculate specific edges for canonical ordering logic
+            # (The previous `lengths` array was just sorted arbitrarily or by index)
+            # Let's be explicit to match `quantized_invariant` logic:
+            
+            # Vertices
+            idx_p, idx_q, idx_r = tri_idxs # These are sorted by index, not geometry
+            vp, vq, vr = pts[idx_p], pts[idx_q], pts[idx_r]
+            
+            # This function calculates the invariant AND handles the sorting internally
+            # We just need to store the indices in the order that `quantized_invariant` implies?
+            # Actually, your original logic stored (ci, cj, ck) based on side lengths.
+            # We need to replicate that.
+            
+            inv = quantized_invariant(vp, vq, vr, binsize=binsize)
+            if inv is None:
+                continue
+
+            # Determining Storage Order:
+            # We need to store vertices [Opp_a, Opp_b, Opp_c]
+            # Re-calc edges to find permutation
+            e1 = np.linalg.norm(vp - vq) # Opp r
+            e2 = np.linalg.norm(vq - vr) # Opp p
+            e3 = np.linalg.norm(vr - vp) # Opp q
+            
+            # lengths_map = [(edge_len, opposite_vertex_idx)]
+            # We want side lengths a <= b <= c
+            edges = [ (e1, idx_r), (e2, idx_p), (e3, idx_q) ]
+            edges.sort(key=lambda x: x[0])
+            
+            # Unpack sorted indices
+            ci, cj, ck = edges[0][1], edges[1][1], edges[2][1]
+
+            bucket = table.setdefault(inv, [])
+            if len(bucket) < max_candidates_per_inv:
+                bucket.append((ci, cj, ck))
+
+    return table
+
 def greedy_unique_matches(dists, idxs, eps):
     """
     Given dists: (N,) distances from transformed observations to nearest catalog points
@@ -316,7 +428,7 @@ def identify_geometric(sim_result, catalog,
     # --- Build hash if missing ---
     if hash_index is None:
         start = time.perf_counter()
-        hash_index = build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01)
+        hash_index = build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, k_neighbors=20)
         end = time.perf_counter()
         print(f"Geometric hash built in {end - start:.3f} s")
 

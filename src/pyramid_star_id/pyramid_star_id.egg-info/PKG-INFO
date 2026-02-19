@@ -1,7 +1,5 @@
-Metadata-Version: 2.4
-Name: pyramid_star_id
+Metadata-Version: 2.1
+Name: pyramid-star-id
 Version: 0.1
 Summary: Pyramid-based star identification utilities
 Author: Auto-generated
-Dynamic: author
-Dynamic: summary

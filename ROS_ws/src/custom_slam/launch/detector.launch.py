@@ -9,7 +9,12 @@ import os
 
 def generate_launch_description():
     pkg_my_robot = get_package_share_directory('custom_slam')
-
+    rviz_config_path = os.path.join(pkg_my_robot, 'config', 'rviz_detector.rviz')
+    stereo_launch_path = os.path.join(
+        get_package_share_directory('stereo_image_proc'),
+        'launch',
+        'stereo_image_proc.launch.py'  # Note: The file name might vary slightly, but this is standard
+    )
     # Robot + Gazebo world
     robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -37,19 +42,30 @@ def generate_launch_description():
     # )
     
     # Visualization (RViz) - Optional
-    # rviz_node = Node(
-    #     package='rviz2',
-    #     executable='rviz2',
-    #     name='rviz',
-    #     output='screen',
-    #     arguments=['-d', rviz_config_path]
-    # )
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz',
+        output='screen',
+        arguments=['-d', rviz_config_path]
+    )
+    
+    rect = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(stereo_launch_path),
+            launch_arguments={
+                'approximate_sync': 'True',  # Important for cameras that don't trigger perfectly together
+                'left_namespace': '/camera/left',
+                'right_namespace': '/camera/right',
+                'target_frame_id': 'base_link', # Or 'odom' or 'camera_left_optical_frame'
+            }.items()
+        )
 
     return LaunchDescription([
         robot,
         detector_node,
         yolo_node,
-        exporter
+        exporter,
         # saver
-        # rviz_node
+        rviz_node,
+        rect
     ])
