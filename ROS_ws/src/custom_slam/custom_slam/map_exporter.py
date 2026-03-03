@@ -40,44 +40,30 @@ class MapExporter(Node):
         if not msg.markers:
             return
 
-        # 1. Get Transform (Camera -> Odom)
-        first_marker = msg.markers[0]
-        source_frame = first_marker.header.frame_id
-        exact_time = first_marker.header.stamp
-        
-        try:
-            trans = self.tf_buffer.lookup_transform(
-                self.target_frame,
-                source_frame,
-                exact_time
-            )
-        except Exception:
-            return
+        # --- CRITICAL FIX: Wipe the exporter's memory every frame ---
+        # This forces the CSV to perfectly mirror RViz!
+        self.rock_memory.clear()
+        # ------------------------------------------------------------
 
-        # 2. Process Markers (Accumulate Points)
+        # 1. Process Markers Directly
         for marker in msg.markers:
+            # Skip the DELETEALL marker we added for RViz
+            if marker.action == 3:
+                continue
+                
             if marker.type == Marker.POINTS:
-                transformed_points = []
+                raw_points = []
                 
                 for pt in marker.points:
-                    p_stamped = PointStamped()
-                    p_stamped.point.x = pt.x
-                    p_stamped.point.y = pt.y
-                    p_stamped.point.z = pt.z
-                    
-                    try:
-                        p_out = do_transform_point(p_stamped, trans)
-                        transformed_points.append([p_out.point.x, p_out.point.y, p_out.point.z])
-                    except:
-                        pass
+                    raw_points.append([pt.x, pt.y, pt.z])
                 
-                if transformed_points:
-                    self.rock_memory[marker.id] = transformed_points
+                if raw_points:
+                    self.rock_memory[marker.id] = raw_points
 
-        # 3. Analyze & Export Data
+        # 2. Analyze & Export Data
         self.export_analysis()
 
-        # 4. Draw Map (Standard Visualization)
+        # 3. Draw Map (Standard Visualization)
         self.draw_map()
 
     def export_analysis(self):
@@ -88,7 +74,7 @@ class MapExporter(Node):
         with open(self.csv_save_path, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
             # Header
-            writer.writerow(['ID', 'Map_X', 'Map_Y', 'Map_Z', 'Width_X', 'Length_Y', 'Height_Z', 'Distance_From_Start'])
+            writer.writerow(['ID', 'Map_X', 'Map_Y', 'Map_Z', 'Width_m', 'Length_m', 'Height_Z'])
             
             for rock_id, points in self.rock_memory.items():
                 pts_np = np.array(points)
@@ -105,19 +91,22 @@ class MapExporter(Node):
                 
                 # Center Position
                 center = np.mean(pts_np, axis=0)
-
                 
                 writer.writerow([
                     rock_id, 
-                    f"{center[0]:.2f}", f"{center[1]:.2f}", f"{center[2]:.2f}",
+                    f"{-center[1]:.2f}", f"{center[0]:.2f}", f"{center[2]:.2f}",
                     f"{width:.2f}", f"{length:.2f}", f"{height:.2f}"
                 ])
 
     def draw_map(self):
-        """Draws the top-down PNG map"""
+        """Draws the top-down PNG map matching RViz orientation"""
         all_points = []
+        
+        # --- NEW: Add the (0,0) origin to the bounds so it never gets cropped! ---
+        all_points.append([0.0, 0.0])
+        # -------------------------------------------------------------------------
+        
         for pid, pts in self.rock_memory.items():
-            # We only need X, Y for the map image
             for p in pts:
                 all_points.append([p[0], p[1]])
 
@@ -125,31 +114,40 @@ class MapExporter(Node):
 
         points_np = np.array(all_points)
 
-        # Auto-Scale
+        # Auto-Scale Bounds
         min_x, min_y = np.min(points_np, axis=0)
         max_x, max_y = np.max(points_np, axis=0)
         
         min_x -= 2.0; max_x += 2.0
         min_y -= 2.0; max_y += 2.0
         
-        width_m = max_x - min_x
-        height_m = max_y - min_y
+        # --- FIX: Swap Width/Height to match ROS Coordinate conventions ---
+        # Image width is controlled by ROS Y (Left/Right)
+        width_m = max_y - min_y
+        # Image height is controlled by ROS X (Forward/Backward)
+        height_m = max_x - min_x
+        # ------------------------------------------------------------------
         
         img_w = int(width_m * self.map_resolution)
         img_h = int(height_m * self.map_resolution)
         
         map_img = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
         
-        # Origin
-        origin_u = int((0 - min_x) * self.map_resolution)
-        origin_v = int((max_y - 0) * self.map_resolution) 
+        # --- FIX: RViz Image Mapping ---
+        # OpenCV U (Left-to-Right) = Mapped from ROS +Y to -Y
+        # OpenCV V (Top-to-Bottom) = Mapped from ROS +X to -X
+        
+        origin_u = int((max_y - 0.0) * self.map_resolution)
+        origin_v = int((max_x - 0.0) * self.map_resolution) 
+        
         if 0 <= origin_u < img_w and 0 <= origin_v < img_h:
+            # Draws the red cross at the spawn origin
             cv2.drawMarker(map_img, (origin_u, origin_v), (0, 0, 255), cv2.MARKER_CROSS, 20, 2)
 
         # Draw Rocks
         for pt in points_np:
-            u = int((pt[0] - min_x) * self.map_resolution)
-            v = int((max_y - pt[1]) * self.map_resolution)
+            u = int((max_y - pt[1]) * self.map_resolution)
+            v = int((max_x - pt[0]) * self.map_resolution)
             
             if 0 <= u < img_w and 0 <= v < img_h:
                 cv2.circle(map_img, (u, v), 2, (0, 255, 0), -1)

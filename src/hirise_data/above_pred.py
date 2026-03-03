@@ -37,7 +37,7 @@ def process_satellite_tiled(image_path, model_path, output_csv, output_image=Non
     fy = 5491.5
     cx = W_global / 2.0
     cy = H_global / 2.0
-    current_depth = 100.0 
+    current_depth = 50.0 
 
     csv_rows = []
     csv_rows.append(['ID', 'Global_U', 'Global_V', 'Map_X', 'Map_Y', 'Width_m', 'Length_m'])

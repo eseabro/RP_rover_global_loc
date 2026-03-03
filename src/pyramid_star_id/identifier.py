@@ -19,17 +19,12 @@ def catalog_to_pts2d(catalog, ref_lat=0.0):
     
     return pts_km
 
-from sklearn.neighbors import KDTree # Ensure this is imported
+from sklearn.neighbors import KDTree 
 
-def build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, max_candidates_per_inv=40, k_neighbors=15):
+def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, max_candidates_per_inv=40, k_neighbors=15):
     """
     Optimized Geometric Hash Builder using K-Nearest Neighbors.
     Complexity: O(N * k^2) instead of O(N^3).
-    
-    Args:
-        k_neighbors: Only form triangles with the k nearest rocks. 
-                     This implicitly ignores triangles that are too large 
-                     for the rover to see at once.
     """
     pts = catalog_pts_2d
     n = len(pts)
@@ -40,10 +35,9 @@ def build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, max_candidates_per_i
     tree = KDTree(pts)
     
     # Query k+1 neighbors (because the point itself is the 1st neighbor)
-    # This returns indices of the closest k points for every point
     _, indices = tree.query(pts, k=min(n, k_neighbors + 1))
 
-    # 2. Precompute distances (Only if N < 5000 to save RAM, otherwise calc on fly)
+    # 2. Precompute distances
     if n < 5000:
         from scipy.spatial.distance import pdist, squareform
         D = squareform(pdist(pts))
@@ -52,25 +46,20 @@ def build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, max_candidates_per_i
         use_precomputed = False
 
     table = {}
-    seen_triangles = set() # To avoid duplicates like (A,B,C) vs (B,A,C)
+    seen_triangles = set() 
 
     # 3. Iterate through every point 'i' and form triangles with its neighbors
     for i in range(n):
-        # Get neighbors of i (excluding i itself, which is at index 0)
         neighbors = indices[i, 1:]
         
-        # Form triangles where 'i' is the anchor, plus 2 neighbors 'j' and 'k'
         for j, k in itertools.combinations(neighbors, 2):
             
-            # Sort indices to ensure uniqueness
-            # (We only want to hash triangle 1-5-9 once, not as 5-1-9, etc.)
             tri_idxs = tuple(sorted((i, j, k)))
             
             if tri_idxs in seen_triangles:
                 continue
             seen_triangles.add(tri_idxs)
             
-            # --- Invariant Logic (Same as before) ---
             if use_precomputed:
                 d_pq = D[tri_idxs[0], tri_idxs[1]]
                 d_qr = D[tri_idxs[1], tri_idxs[2]]
@@ -87,49 +76,42 @@ def build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, max_candidates_per_i
             if np.any(lengths < 1e-9):
                 continue
             
-            # Find Canonical Order (a <= b <= c)
-            # We must map the sorted edges back to the original vertex indices
-            # Indices in tri_idxs are [A, B, C]
-            # Edges are [AB, BC, CA]
-            # Opposites: AB->C(2), BC->A(0), CA->B(1)
-            
-            # Re-calculate specific edges for canonical ordering logic
-            # (The previous `lengths` array was just sorted arbitrarily or by index)
-            # Let's be explicit to match `quantized_invariant` logic:
-            
-            # Vertices
-            idx_p, idx_q, idx_r = tri_idxs # These are sorted by index, not geometry
+            idx_p, idx_q, idx_r = tri_idxs 
             vp, vq, vr = pts[idx_p], pts[idx_q], pts[idx_r]
             
-            # This function calculates the invariant AND handles the sorting internally
-            # We just need to store the indices in the order that `quantized_invariant` implies?
-            # Actually, your original logic stored (ci, cj, ck) based on side lengths.
-            # We need to replicate that.
-            
+            # NOTE: Assumes quantized_invariant is defined elsewhere in your file!
             inv = quantized_invariant(vp, vq, vr, binsize=binsize)
             if inv is None:
                 continue
 
-            # Determining Storage Order:
-            # We need to store vertices [Opp_a, Opp_b, Opp_c]
-            # Re-calc edges to find permutation
             e1 = np.linalg.norm(vp - vq) # Opp r
             e2 = np.linalg.norm(vq - vr) # Opp p
             e3 = np.linalg.norm(vr - vp) # Opp q
             
-            # lengths_map = [(edge_len, opposite_vertex_idx)]
-            # We want side lengths a <= b <= c
             edges = [ (e1, idx_r), (e2, idx_p), (e3, idx_q) ]
             edges.sort(key=lambda x: x[0])
             
-            # Unpack sorted indices
+            # These are the final, sorted triangle indices
             ci, cj, ck = edges[0][1], edges[1][1], edges[2][1]
 
             bucket = table.setdefault(inv, [])
             if len(bucket) < max_candidates_per_inv:
-                bucket.append((ci, cj, ck))
+                # --- MODIFICATION 2: Store the sizes alongside the indices! ---
+                if catalog_sizes is not None:
+                    # Calculate Area (Width * Length) for each vertex using the canonical order
+                    area_i = catalog_sizes[ci][0] * catalog_sizes[ci][1]
+                    area_j = catalog_sizes[cj][0] * catalog_sizes[cj][1]
+                    area_k = catalog_sizes[ck][0] * catalog_sizes[ck][1]
+                    
+                    # Store as a 6-item tuple: (idx1, idx2, idx3, area1, area2, area3)
+                    bucket.append((ci, cj, ck, area_i, area_j, area_k))
+                else:
+                    # Fallback if no sizes are provided (stores standard 3-item tuple)
+                    bucket.append((ci, cj, ck))
+                # --------------------------------------------------------------
 
     return table
+
 
 def greedy_unique_matches(dists, idxs, eps):
     """
@@ -349,55 +331,7 @@ def canonical_triangle_vertex_order(pts3):
     return ordered_vertices  # length 3 list of indices in {0,1,2}
 
 
-# Ran in 90.5 seconds
-from scipy.spatial.distance import pdist, squareform
-def build_geometric_hash_from_pts(catalog_pts_2d, binsize=0.01, max_candidates_per_inv=40):
-    """
-    Very fast geometric hash builder (no Numba).
-    Uses:
-        - one pdist() for all pairwise distances
-        - canonical triangle ordering
-        - your full 5-d invariant
-    """
-    pts = catalog_pts_2d
-    n = len(pts)
-
-    # Precompute pairwise distances once
-    D = squareform(pdist(pts))
-
-    table = {}
-
-    for i, j, k in itertools.combinations(range(n), 3):
-        # Distances without recomputation
-        d_pq = D[i, j]
-        d_qr = D[j, k]
-        d_rp = D[k, i]
-
-        lengths = np.array([d_pq, d_qr, d_rp])
-        if np.any(lengths < 1e-9):
-            continue
-
-        idxs = [i, j, k]
-        opposite = [2, 0, 1]
-        order = [idxs[opposite[idx]] for idx in np.argsort(lengths)]
-
-        ci, cj, ck = order
-
-        # Compute full 5-dim invariant (your existing function)
-        inv = quantized_invariant(
-            catalog_pts_2d[ci], catalog_pts_2d[cj], catalog_pts_2d[ck], binsize=binsize
-        )
-        if inv is None:
-            continue
-
-        # Store with cap
-        bucket = table.setdefault(inv, [])
-        if len(bucket) < max_candidates_per_inv:
-            bucket.append((ci, cj, ck))
-
-    return table
-
-def identify_geometric(sim_result, catalog,
+def identify_geometric(sim_result, catalog_dict,
                        hash_index=None,
                        eps=8.0,
                        binsize=0.02,
@@ -405,19 +339,25 @@ def identify_geometric(sim_result, catalog,
                        inv_neighbor_radius=1,
                        max_candidates_per_inv=40,
                        min_seed_inliers=3,
-                       early_exit_fraction=0.70):
+                       early_exit_fraction=0.70,
+                       size_tolerance=0.85):
     """
     Robust geometric hashing + RANSAC landmark identification using full 5-dim invariant
     and canonical triangle vertex ordering so that triangle vertices correspond deterministically.
     """
 
-    # --- Extract data ---
-    if isinstance(catalog, list):
-        catalog_pts_2d = catalog_to_pts2d(catalog)
-    else:
-        catalog_pts_2d = catalog
 
     observed_pts_2d = sim_result['observed_vectors']
+    observed_sizes = sim_result.get('observed_sizes', None)
+    
+    catalog_pts_2d = catalog_dict['catalog_vectors']
+    catalog_sizes = catalog_dict.get('catalog_sizes', None)
+
+    # --- Extract data ---
+    if isinstance(catalog_pts_2d, list):
+        catalog_pts_2d = catalog_to_pts2d(catalog_pts_2d)
+    else:
+        catalog_pts_2d = catalog_pts_2d
 
     # Validate shapes (keep early errors)
     if not isinstance(catalog_pts_2d, np.ndarray) or catalog_pts_2d.shape[1] != 2:
@@ -428,7 +368,7 @@ def identify_geometric(sim_result, catalog,
     # --- Build hash if missing ---
     if hash_index is None:
         start = time.perf_counter()
-        hash_index = build_geometric_hash_fast(catalog_pts_2d, binsize=0.01, k_neighbors=20)
+        hash_index = build_geometric_hash_fast(catalog_pts_2d, binsize=binsize, k_neighbors=20)
         end = time.perf_counter()
         print(f"Geometric hash built in {end - start:.3f} s")
 
@@ -436,18 +376,20 @@ def identify_geometric(sim_result, catalog,
     all_obs_tris = list(itertools.combinations(obs_indices, 3))
     # cap observed triangles for speed if huge
     if len(all_obs_tris) > 20000:
+        print("capping triangles")
         rng_cap = np.random.RandomState(42)
         keep = rng_cap.choice(len(all_obs_tris), 20000, replace=False)
         all_obs_tris = [all_obs_tris[i] for i in keep]
 
     cat_tree = KDTree(catalog_pts_2d)
-    rng = np.random.RandomState(123)
+    rng = np.random.RandomState()
 
     best = None
     eps_init = max(eps * 3.0, 20.0)
 
     # RANSAC with tqdm
     for _ in tqdm(range(ransac_iters), desc="RANSAC"):
+    # for _ in range(ransac_iters):
 
         # pick a random observed triangle (in original index order)
         oi, oj, ok = all_obs_tris[rng.randint(0, len(all_obs_tris))]
@@ -462,7 +404,11 @@ def identify_geometric(sim_result, catalog,
         inv = quantized_invariant(A[0], A[1], A[2], binsize=binsize)
         if inv is None:
             continue
-
+        
+        if observed_sizes is not None:
+            o_area_a = observed_sizes[o_a][0] * observed_sizes[o_a][1]
+            o_area_b = observed_sizes[o_b][0] * observed_sizes[o_b][1]
+            o_area_c = observed_sizes[o_c][0] * observed_sizes[o_c][1]
         # invariant neighbor keys
         candidate_invs = invariant_neighbors(inv, radius=inv_neighbor_radius)
 
@@ -472,7 +418,23 @@ def identify_geometric(sim_result, catalog,
             tris = hash_index.get(key)
             if tris:
                 # cap the number taken from this key
-                candidate_triangles.extend(tris[:max_candidates_per_inv])
+                for tri_data in tris:
+                    # --- NEW: O(1) Size Filtering during Hash Lookup ---
+                    if len(tri_data) == 6 and observed_sizes is not None:
+                        ci, cj, ck, c_area_a, c_area_b, c_area_c = tri_data
+                        
+                        # Check the 3 vertices. If ANY fail the tolerance, throw the triangle away!
+                        if not ((1.0 - size_tolerance) < (o_area_a / (c_area_a + 1e-6)) < (1.0 + size_tolerance)): continue
+                        if not ((1.0 - size_tolerance) < (o_area_b / (c_area_b + 1e-6)) < (1.0 + size_tolerance)): continue
+                        if not ((1.0 - size_tolerance) < (o_area_c / (c_area_c + 1e-6)) < (1.0 + size_tolerance)): continue
+                        
+                        candidate_triangles.append((ci, cj, ck))
+                    else:
+                        # Fallback if sizes aren't being used
+                        candidate_triangles.append(tri_data[:3])
+                        
+                # Cap candidates *after* filtering out the bad sizes
+                candidate_triangles = candidate_triangles[:max_candidates_per_inv]
 
         if not candidate_triangles:
             continue
@@ -490,7 +452,7 @@ def identify_geometric(sim_result, catalog,
             s, Rm, t = est
 
             # sanity on scale
-            if not (0.05 <= s <= 20.0):
+            if not (0.80 <= s <= 1.20):
                 continue
 
             # coarse check with loose eps_init using RMS + unique matching

@@ -1,0 +1,7 @@
+tracker_type: bytetrack
+track_high_thresh: 0.40  # Lower this to allow medium-confidence rocks to start a track (Default is usually ~0.5/0.6)
+track_low_thresh: 0.10   # How low confidence can go before losing a track
+new_track_thresh: 0.50   # Threshold to initialize a new track
+track_buffer: 30         # How many frames to remember a lost rock before deleting its ID
+match_thresh: 0.80       # Increase this to allow rocks to "jump" further across the screen
+fuse_score: True
