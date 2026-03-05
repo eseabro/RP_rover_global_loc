@@ -5,7 +5,7 @@ import os
 from ultralytics import YOLO
 import torch
 
-def process_satellite_tiled(image_path, model_path, output_csv, output_image=None, tile_size=1500):
+def process_satellite_tiled(image_path, model_path, output_csv, output_image=None, tile_size=1536):
     """
     Runs YOLO on a massive image using tiling to avoid GPU crashes.
     Stitches the visual results back together into a full-resolution map.
@@ -124,12 +124,13 @@ def process_satellite_tiled(image_path, model_path, output_csv, output_image=Non
 
 if __name__ == "__main__":
     # Replace these paths with your actual files
-    img_file = "gazebo_imgs/MarsYard2021_above.jpg"
+    world_name = "marsyard2020"
+    img_file = f"gazebo_imgs/{world_name}.jpg"
     model_file = "above_rocks.pt" # Your trained model
-    out_csv = "above_rock_analysis.csv"
-    out_img = "rock_visual_masks.jpg"  # <--- New image output path
+    out_csv = f"{world_name}_sat.csv"
+    out_img = f"{world_name}_masks.jpg"  # <--- New image output path
     
     try:
-        process_satellite_tiled(img_file, model_file, out_csv, output_image=out_img, tile_size=1500)
+        process_satellite_tiled(img_file, model_file, out_csv, output_image=out_img, tile_size=1024)
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")

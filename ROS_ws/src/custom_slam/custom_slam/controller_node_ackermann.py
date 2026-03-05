@@ -5,12 +5,12 @@ import numpy as np
 
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TransformStamped, Quaternion, PoseStamped
 from sensor_msgs.msg import Imu, JointState
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from tf_transformations import quaternion_from_euler
-from geometry_msgs.msg import TransformStamped, Quaternion
 import tf2_ros
+
 
 
 class Controller(Node):
@@ -32,11 +32,24 @@ class Controller(Node):
 
         self.motor_wheel_pub = self.create_publisher(Float64MultiArray, '/wheel_controller/commands', 1)
         self.servo_pub = self.create_publisher(JointTrajectory, '/servo_controller/joint_trajectory', 1)
-        self.odom_pub = self.create_publisher(Odometry, '/calculated_odom', 10)
+        self.odom_pub = self.create_publisher(Odometry, '/wheel_odom', 10)
+        self.path_pub = self.create_publisher(Path, '/wheel_path', 10)
+        
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = 'odom'
 
         self.sub = self.create_subscription(Twist, 'cmd_vel', self.msg_callback, 1)
         self.joint_sub = self.create_subscription(JointState, 'joint_states', self.joint_state_callback, 10)
-        self.imu_sub = self.create_subscription(Imu, 'imu_plugin/out', self.imu_callback, 1)
+        self.imu_sub = self.create_subscription(Imu, 'imu', self.imu_callback, 1)
+        
+        # Position Initialization
+        self.is_initialized = False
+        self.gt_sub = self.create_subscription(
+            Odometry, 
+            '/ground_truth/odom', 
+            self.ground_truth_callback, 
+            1
+        )
 
         # Odometry state variables
         self.x = 0.0
@@ -70,6 +83,8 @@ class Controller(Node):
         self.get_logger().info('Controller node started with integrated odometry.')
 
     def joint_state_callback(self, msg: JointState):
+        if not self.is_initialized:
+            return
         # Extract left and right wheel positions by joint name
         try:
             wheel_indices = [
@@ -142,9 +157,12 @@ class Controller(Node):
                 dx = R * (math.sin(self.theta + d_theta) - math.sin(self.theta))
                 dy = -R * (math.cos(self.theta + d_theta) - math.cos(self.theta))
 
+        dx = d_center * math.cos(self.theta)
+        dy = d_center * math.sin(self.theta)
+        
         self.x += dx
         self.y += dy
-        self.theta = math.atan2(math.sin(self.theta + d_theta), math.cos(self.theta + d_theta))
+        # self.theta = math.atan2(math.sin(self.theta + d_theta), math.cos(self.theta + d_theta))
         
         
                 
@@ -185,7 +203,9 @@ class Controller(Node):
 
 
         # Publish odom
-        self.publish_odom(current_time, dx/dt, dy/dt, d_theta/dt)
+        local_vx = d_center / dt
+        local_vy = 0.0 # Ackermann rovers don't drive sideways
+        self.publish_odom(current_time, local_vx, local_vy, d_theta/dt)
         
         if self.pub_tf:
             self.publish_tf(current_time)
@@ -218,6 +238,20 @@ class Controller(Node):
         odom_msg.twist.covariance = self.cov_twist
         
         self.odom_pub.publish(odom_msg)
+        
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = now.to_msg()
+        pose_stamped.header.frame_id = 'odom'
+        pose_stamped.pose = odom_msg.pose.pose
+        
+        self.path_msg.poses.append(pose_stamped)
+        self.path_msg.header.stamp = now.to_msg()
+        
+        # Optional: Prevent the array from growing infinitely and crashing your RAM
+        if len(self.path_msg.poses) > 5000:
+            self.path_msg.poses.pop(0)
+            
+        self.path_pub.publish(self.path_msg)
 
     def publish_tf(self, now):
         t = TransformStamped()
@@ -237,13 +271,16 @@ class Controller(Node):
 
 
     def imu_callback(self, msg: Imu):
+        if not self.is_initialized:
+            return
         # Convert quaternion to yaw angle (theta)
         q = msg.orientation
         quat = [q.x, q.y, q.z, q.w]
-        # Use tf_transformations or tf2 to convert to roll, pitch, yaw
         import tf_transformations
         roll, pitch, yaw = tf_transformations.euler_from_quaternion(quat)
-        # self.theta = yaw
+        
+        # --- FIX 1: Let the IMU dictate the heading ---
+        self.theta = yaw
 
     def msg_callback(self, msg: Twist):
         if (self.pri_velocity.linear.x == msg.linear.x and
@@ -393,6 +430,23 @@ class Controller(Node):
         servo.points.append(point)
 
         self.servo_pub.publish(servo)
+        
+    def ground_truth_callback(self, msg: Odometry):
+        # Only run this ONCE at startup
+        if not self.is_initialized:
+            # Sync X and Y
+            self.x = msg.pose.pose.position.x
+            self.y = msg.pose.pose.position.y
+            
+            # Sync Initial Heading
+            q = msg.pose.pose.orientation
+            quat = [q.x, q.y, q.z, q.w]
+            import tf_transformations
+            _, _, yaw = tf_transformations.euler_from_quaternion(quat)
+            self.theta = yaw
+            
+            self.is_initialized = True
+            self.get_logger().info(f"🎯 Synced to Ground Truth! Starting at X:{self.x:.2f}, Y:{self.y:.2f}, Yaw:{self.theta:.2f}")
 
 
 def main(args=None):

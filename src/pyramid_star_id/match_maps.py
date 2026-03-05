@@ -227,6 +227,6 @@ def match_local_to_global(global_csv, local_csv):
 if __name__ == "__main__":
     # Replace with your actual file paths
     global_csv_path = "/home/ws/src/hirise_data/above_rock_analysis.csv" # The "Above" Map
-    local_csv_path = "/home/ws/src/hirise_data/rock_analysis_test4.csv"             # The "Local" Map
+    local_csv_path = "/home/ws/src/hirise_data/rock_analysis_test5.csv"             # The "Local" Map
     
     match_local_to_global(global_csv_path, local_csv_path)

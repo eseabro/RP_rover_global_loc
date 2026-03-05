@@ -2,14 +2,12 @@
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray, Marker
-from geometry_msgs.msg import PointStamped
+from std_msgs.msg import Float32MultiArray
 from tf2_ros import Buffer, TransformListener
-from tf2_geometry_msgs import do_transform_point
 import cv2
 import numpy as np
 import os
 import csv
-import math
 
 class MapExporter(Node):
     def __init__(self):
@@ -21,7 +19,7 @@ class MapExporter(Node):
         self.target_frame = 'odom' # Global Frame for the map
         
         # MEMORY: Key = Marker ID, Value = List of [x, y, z] in ODOM frame
-        self.rock_memory = {} 
+        self.rock_memory = {}
         
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -32,22 +30,22 @@ class MapExporter(Node):
             self.marker_callback, 
             10
         )
+        self.map_data_pub = self.create_publisher(Float32MultiArray, '/rock_map_data', 10)
+        
         self.get_logger().info(f'Analysis Map Exporter Started.')
         self.get_logger().info(f'Image: {self.image_save_path}')
         self.get_logger().info(f'Data:  {self.csv_save_path}')
+
 
     def marker_callback(self, msg):
         if not msg.markers:
             return
 
-        # --- CRITICAL FIX: Wipe the exporter's memory every frame ---
-        # This forces the CSV to perfectly mirror RViz!
         self.rock_memory.clear()
-        # ------------------------------------------------------------
 
         # 1. Process Markers Directly
         for marker in msg.markers:
-            # Skip the DELETEALL marker we added for RViz
+
             if marker.action == 3:
                 continue
                 
@@ -58,13 +56,42 @@ class MapExporter(Node):
                     raw_points.append([pt.x, pt.y, pt.z])
                 
                 if raw_points:
-                    self.rock_memory[marker.id] = raw_points
-
+                    self.rock_memory[marker.id] = raw_points  
+        
         # 2. Analyze & Export Data
         self.export_analysis()
 
         # 3. Draw Map (Standard Visualization)
         self.draw_map()
+        
+        # Publish Map Data
+        self.publish_map_data()
+
+    def publish_map_data(self):
+        if not self.rock_memory:
+            return
+            
+        msg = Float32MultiArray()
+        flat_data = []
+        
+        for rock_id, points in self.rock_memory.items():
+            pts_np = np.array(points)
+            
+            # Math from your export_analysis function
+            min_bounds = np.min(pts_np, axis=0)
+            max_bounds = np.max(pts_np, axis=0)
+            dims = max_bounds - min_bounds
+            center = np.mean(pts_np, axis=0)
+            
+            # Append the 7 values exactly as they would appear in the CSV
+            flat_data.extend([
+                float(rock_id),
+                float(-center[1]), float(center[0]), float(center[2]), # X, Y, Z
+                float(dims[0]), float(dims[1]), float(dims[2])        # W, L, H
+            ])
+            
+        msg.data = flat_data
+        self.map_data_pub.publish(msg)
 
     def export_analysis(self):
         """Calculates center and dimensions for every rock and saves to CSV"""

@@ -7,7 +7,6 @@
   config:
     frame_id: base_scan
 
-
 - ros_topic_name: "scan/points"
   gz_topic_name: "scan/points"
   ros_type_name: "sensor_msgs/msg/PointCloud2"
@@ -47,7 +46,6 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-
 - ros_topic_name: "clock"
   gz_topic_name: "clock"
   ros_type_name: "rosgraph_msgs/msg/Clock"
@@ -55,7 +53,7 @@
   direction: GZ_TO_ROS
 
 - gz_topic_name: "/ground_truth/odom"
-  ros_topic_name: "/odom"
+  ros_topic_name: "/ground_truth/odom"
   ros_type_name: "nav_msgs/msg/Odometry"
   gz_type_name: "gz.msgs.Odometry"
   direction: GZ_TO_ROS

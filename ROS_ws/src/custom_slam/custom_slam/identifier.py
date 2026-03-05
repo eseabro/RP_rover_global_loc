@@ -1,25 +1,10 @@
 import itertools
-import time
 import numpy as np
 from sklearn.neighbors import KDTree
-from tqdm import tqdm
+from scipy.spatial.distance import pdist, squareform
 
 def quant(x, binsize=0.01):
     return int(np.floor(x / binsize))
-
-
-# Then in catalog_to_pts2d, convert to km at a reference latitude:
-def catalog_to_pts2d(catalog, ref_lat=0.0):
-    """Convert catalog to km using simple projection at reference latitude."""
-    deg_to_km_lat = 111.0
-    deg_to_km_lon = 111.0 * np.cos(np.deg2rad(ref_lat))
-    
-    pts = np.array([[c['lon_deg'], c['lat_deg']] for c in catalog], dtype=np.float32)
-    pts_km = pts * np.array([deg_to_km_lon, deg_to_km_lat])
-    
-    return pts_km
-
-from sklearn.neighbors import KDTree 
 
 def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, max_candidates_per_inv=40, k_neighbors=15):
     """
@@ -39,7 +24,6 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
 
     # 2. Precompute distances
     if n < 5000:
-        from scipy.spatial.distance import pdist, squareform
         D = squareform(pdist(pts))
         use_precomputed = True
     else:
@@ -108,7 +92,6 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
                 else:
                     # Fallback if no sizes are provided (stores standard 3-item tuple)
                     bucket.append((ci, cj, ck))
-                # --------------------------------------------------------------
 
     return table
 
@@ -164,8 +147,6 @@ def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, ret
     else:
         rms = np.inf
 
-    # For ease of later processing: assigned_idxs gives -1 for unmatched obs
-    # return inlier_count, inlier_mask, rms, dists, chosen_cat_for_obs
     if return_assigned:
         return inlier_count, inlier_mask, rms, chosen_dists, chosen_cat_for_obs
     else:
@@ -282,9 +263,8 @@ def quantized_invariant(p, q, r, binsize=0.01):
         x = np.clip(num / den, -1.0, 1.0)
         return np.arccos(x)
 
-    # angle opposite a
+
     angle_a = safe_arccos(b**2 + c**2 - a**2, 2.0 * b * c) / np.pi  # normalize to [0,1]
-    # angle opposite b
     angle_b = safe_arccos(a**2 + c**2 - b**2, 2.0 * a * c) / np.pi
 
     # Area via Heron’s formula (perm-invariant), then normalize by c^2
@@ -310,14 +290,10 @@ def canonical_triangle_vertex_order(pts3):
     of the vertices opposite those sides.
     This ordering is deterministic and maps to the invariant's sorted-side convention.
     """
-    # pts3 assumed shape (3,2) corresponding to vertices [0,1,2] -> p,q,r
     p, q, r = pts3[0], pts3[1], pts3[2]
-    # side lengths and which vertex they are opposite to:
-    # d(p,q) is opposite r -> index 2
+
     d_pq = np.linalg.norm(p - q)
-    # d(q,r) opposite p -> index 0
     d_qr = np.linalg.norm(q - r)
-    # d(r,p) opposite q -> index 1
     d_rp = np.linalg.norm(r - p)
 
     lengths_with_opposite = [
@@ -326,7 +302,6 @@ def canonical_triangle_vertex_order(pts3):
         (d_rp, 1)
     ]
     lengths_with_opposite.sort(key=lambda x: x[0])  # ascending a<=b<=c
-    # extract the vertex indices in order opposite a,b,c
     ordered_vertices = [t[1] for t in lengths_with_opposite]
     return ordered_vertices  # length 3 list of indices in {0,1,2}
 
@@ -362,7 +337,7 @@ def identify_geometric(sim_result, catalog_dict,
     best = None
     eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
 
-    for _ in tqdm(range(ransac_iters), desc="RANSAC"):
+    for _ in range(ransac_iters):
         # Select random triangle
         tri_idx = all_obs_tris[rng.randint(0, len(all_obs_tris))]
         obs_pts3 = observed_pts_2d[list(tri_idx)]
@@ -426,6 +401,8 @@ def identify_geometric(sim_result, catalog_dict,
 
             if in_cnt < min_seed_inliers: continue
 
+            # CONDENSED: Build matches directly from the scoring indices
+            # No need for the extra cat_tree.query here anymore!
             matches = [(assigned_idxs[i], i, dists[i]) for i in np.where(inliers)[0]]
 
             if best is None or (in_cnt > best['inlier_count'] or (in_cnt == best['inlier_count'] and rms < best['rms'])):
