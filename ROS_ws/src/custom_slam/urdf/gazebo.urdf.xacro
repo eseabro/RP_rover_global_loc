@@ -150,19 +150,20 @@
 
 <gazebo>
   <plugin filename="gz-sim-odometry-publisher-system"
-          name="gz::sim::systems::OdometryPublisher">
-    <odom_frame>odom</odom_frame>
-    <robot_base_frame>base_footprint</robot_base_frame>
-    
-    <odom_publish_frequency>50</odom_publish_frequency>
-    <odom_topic>/ground_truth/odom</odom_topic>
-    
-    <tf_topic>/tf</tf_topic> 
+            name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>odom</odom_frame>
+        <robot_base_frame>base_footprint</robot_base_frame>
+        
+        <odom_topic>/ground_truth/odom</odom_topic>
+        <odom_publish_frequency>50.0</odom_publish_frequency>
 
-    <xyz_offset>0 0 0</xyz_offset>
-    <rpy_offset>0 0 0</rpy_offset>
-    <gaussian_noise>0.0</gaussian_noise>
-  </plugin>
+        <tf_topic>/tf</tf_topic> 
+        
+        <dimensions>3</dimensions>
+        
+        <xyz_offset>0 0 0</xyz_offset>
+        <rpy_offset>0 0 0</rpy_offset>
+    </plugin>
 </gazebo>
 
   <!-- Sensors (URDF -> SDF extension through <gazebo reference="...">) -->

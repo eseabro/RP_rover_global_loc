@@ -118,8 +118,12 @@ def generate_launch_description():
 
 
     spawn_after_gazebo = TimerAction(
-        period=5.0,  # seconds, adjust as needed
+        period=3.0,  # seconds, adjust as needed
         actions=[spawn]
+    )
+    control_after_spawn = TimerAction(
+        period=5.0,  # seconds, adjust as needed
+        actions=[controller]
     )
 
     load_joint_state_controller = ExecuteProcess(
@@ -148,8 +152,13 @@ def generate_launch_description():
         gz_bridge,
         robot_state_publisher_node,
         spawn_after_gazebo,
-        controller,
         odom_path,
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=spawn,
+                on_exit=[control_after_spawn],
+            )
+        ),
         RegisterEventHandler(
             event_handler=OnProcessExit(
                 target_action=spawn,

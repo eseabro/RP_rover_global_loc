@@ -8,7 +8,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import Twist, TransformStamped, Quaternion, PoseStamped
 from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry, Path
-from tf_transformations import quaternion_from_euler
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
 import tf2_ros
 
 
@@ -54,7 +54,9 @@ class Controller(Node):
         # Odometry state variables
         self.x = 0.0
         self.y = 0.0
+        self.z = 0.0
         self.theta = 0.0
+        self.pitch = 0.0
 
         self.last_positions = None
         self.last_time = None
@@ -136,35 +138,43 @@ class Controller(Node):
         # Forward displacement from encoders
         d_center = (right_disp + left_disp) / 2.0
         
+        # --- 1. UNIVERSAL 3D CLIMBING MATH ---
+        # No matter if we are turning or going straight, climbing is climbing!
+        dz = d_center * math.sin(self.pitch)
+        d_xy = d_center * math.cos(self.pitch)
+        
+        self.z += dz  # Update global Z immediately
+        
+        # --- 2. STEERING & X/Y PLANE MATH ---
         if abs(d_center) < 0.001 and abs(right_disp - left_disp) > 0.001:
             # Spot turn → use differential-drive kinematics
             d_theta = (right_disp - left_disp) / self.TRACK_WIDTH
-            R = 0.0
             dx = 0.0
             dy = 0.0
+            
         else:
             # Normal motion → use steering geometry
             tan_diff = math.tan(delta_f) - math.tan(delta_r)
+            
             if abs(tan_diff) < 1e-6:
-                R = float('inf')
+                # Driving straight
                 d_theta = 0.0
-                dx = d_center * math.cos(self.theta)
-                dy = d_center * math.sin(self.theta)
+                dx = d_xy * math.cos(self.theta)
+                dy = d_xy * math.sin(self.theta)
                 
             else:
+                # Ackermann Arc turning
                 R = self.WHEEL_BASE / tan_diff
                 d_theta = d_center / R
-                dx = R * (math.sin(self.theta + d_theta) - math.sin(self.theta))
-                dy = -R * (math.cos(self.theta + d_theta) - math.cos(self.theta))
+                dx = d_xy * math.cos(self.theta + d_theta)
+                dy = d_xy * math.sin(self.theta + d_theta)
 
-        dx = d_center * math.cos(self.theta)
-        dy = d_center * math.sin(self.theta)
-        
+        # Apply the horizontal movement to the global map
         self.x += dx
         self.y += dy
         # self.theta = math.atan2(math.sin(self.theta + d_theta), math.cos(self.theta + d_theta))
-        
-        
+        if math.isnan(self.x) or math.isnan(self.z):
+            self.get_logger().error("WARNING: Odometry math exploded into NaNs!")
                 
         turning_factor = abs(d_theta)
         # Base covariances
@@ -181,9 +191,9 @@ class Controller(Node):
         self.cov_pose = [
             xy_cov, 0.0,    0.0,    0.0,    0.0,    0.0,     # x
             0.0,    xy_cov, 0.0,    0.0,    0.0,    0.0,     # y
-            0.0,    0.0,    1e6,    0.0,    0.0,    0.0,     # z (unused)
+            0.0,    0.0,    0.05,    0.0,    0.0,    0.0,     # z (unused)
             0.0,    0.0,    0.0,    1e6,    0.0,    0.0,     # roll (unused)
-            0.0,    0.0,    0.0,    0.0,    1e6,    0.0,     # pitch (unused)
+            0.0,    0.0,    0.0,    0.0,    0.05,    0.0,     # pitch (unused)
             0.0,    0.0,    0.0,    0.0,    0.0,    yaw_cov  # yaw
         ]
         
@@ -202,10 +212,12 @@ class Controller(Node):
 
 
 
-        # Publish odom
-        local_vx = d_center / dt
-        local_vy = 0.0 # Ackermann rovers don't drive sideways
-        self.publish_odom(current_time, local_vx, local_vy, d_theta/dt)
+
+        local_vx = d_xy / dt
+        local_vy = 0.0 
+        local_vz = dz / dt
+
+        self.publish_odom(current_time, local_vx, local_vy, local_vz, d_theta/dt)
         
         if self.pub_tf:
             self.publish_tf(current_time)
@@ -215,7 +227,7 @@ class Controller(Node):
         self.last_time = current_time
 
 
-    def publish_odom(self, now, vx, vy, vtheta):
+    def publish_odom(self, now, vx, vy, vz, vtheta):
         odom_msg = Odometry()
         odom_msg.header.stamp = now.to_msg()
         odom_msg.header.frame_id = 'odom'
@@ -223,7 +235,7 @@ class Controller(Node):
 
         odom_msg.pose.pose.position.x = self.x
         odom_msg.pose.pose.position.y = self.y
-        odom_msg.pose.pose.position.z = 0.0
+        odom_msg.pose.pose.position.z = self.z
 
         quat = quaternion_from_euler(0, 0, self.theta)
         odom_msg.pose.pose.orientation = Quaternion(
@@ -232,6 +244,7 @@ class Controller(Node):
 
         odom_msg.twist.twist.linear.x = vx
         odom_msg.twist.twist.linear.y = vy
+        odom_msg.twist.twist.linear.z = vz
         odom_msg.twist.twist.angular.z = vtheta
         
         odom_msg.pose.covariance = self.cov_pose
@@ -246,6 +259,7 @@ class Controller(Node):
         
         self.path_msg.poses.append(pose_stamped)
         self.path_msg.header.stamp = now.to_msg()
+        self.path_msg.header.frame_id = 'odom'
         
         # Optional: Prevent the array from growing infinitely and crashing your RAM
         if len(self.path_msg.poses) > 5000:
@@ -260,7 +274,7 @@ class Controller(Node):
         t.child_frame_id = 'base_footprint'
         t.transform.translation.x = self.x
         t.transform.translation.y = self.y
-        t.transform.translation.z = 0.0
+        t.transform.translation.z = self.z
 
         quat = quaternion_from_euler(0, 0, self.theta)
         t.transform.rotation = Quaternion(
@@ -276,11 +290,11 @@ class Controller(Node):
         # Convert quaternion to yaw angle (theta)
         q = msg.orientation
         quat = [q.x, q.y, q.z, q.w]
-        import tf_transformations
-        roll, pitch, yaw = tf_transformations.euler_from_quaternion(quat)
+
+        roll, pitch, yaw = euler_from_quaternion(quat)
         
-        # --- FIX 1: Let the IMU dictate the heading ---
         self.theta = yaw
+        self.pitch = -pitch
 
     def msg_callback(self, msg: Twist):
         if (self.pri_velocity.linear.x == msg.linear.x and
@@ -437,7 +451,7 @@ class Controller(Node):
             # Sync X and Y
             self.x = msg.pose.pose.position.x
             self.y = msg.pose.pose.position.y
-            
+            self.z = msg.pose.pose.position.z
             # Sync Initial Heading
             q = msg.pose.pose.orientation
             quat = [q.x, q.y, q.z, q.w]
