@@ -544,7 +544,7 @@
     <joint name="left_camera_joint" type="fixed">
         <parent link="camera_link"/>
         <child link="left_camera_frame"/>
-        <origin xyz="0 0.05 0" rpy="0 0.261799 0"/> <!-- +35mm left -->
+        <origin xyz="0 0.05 0" rpy="0 0.261799 0"/> 
     </joint>
     <link name="left_camera_frame"/>
 
@@ -559,7 +559,7 @@
     <joint name="right_camera_joint" type="fixed">
         <parent link="camera_link"/>
         <child link="right_camera_frame"/>
-        <origin xyz="0 -0.05 0" rpy="0 0.261799 0"/>  <!-- -35mm right -->
+        <origin xyz="0 -0.05 0" rpy="0 0.261799 0"/>
     </joint>
     <link name="right_camera_frame"/>
 

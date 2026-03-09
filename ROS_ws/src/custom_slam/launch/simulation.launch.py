@@ -122,7 +122,7 @@ def generate_launch_description():
         actions=[spawn]
     )
     control_after_spawn = TimerAction(
-        period=5.0,  # seconds, adjust as needed
+        period=10.0,  # seconds, adjust as needed
         actions=[controller]
     )
 
