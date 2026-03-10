@@ -81,48 +81,52 @@ class RockMatcherNode(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to load CSV: {e}")
             
-            
+
+
     def map_data_callback(self, msg):
         if self.catalog_dict is None:
             return
         
-        # msg.data is an empty list if no rocks are published yet
-        if not msg.data:
+        # Ensure we have at least the timestamp + 1 rock (1 + 7 = 8 elements minimum)
+        if not msg.data or len(msg.data) < 8:
             return 
         
-        # 1. Float32MultiArray has no header. Get time from the node's clock.
-        current_time = self.get_clock().now()
-        current_msg_time_sec = current_time.nanoseconds * 1e-9
+        # 1. Extract the timestamp from the very front of the array!
+        timestamp_sec = float(msg.data[0])
+        
+        # 2. Slice off the timestamp so the rest is pure rock data
+        rock_data = msg.data[1:]
 
         # --- Time-Gated Logic & Sim Time Fallback ---
-        if current_msg_time_sec == 0.0:
+        if timestamp_sec == 0.0:
             if not hasattr(self, '_frame_fallback'): self._frame_fallback = 0
             self._frame_fallback += 1
             if self._frame_fallback % 50 != 0:
                 return
         else:
-            time_since_last = current_msg_time_sec - self.last_match_time_sec
-            if time_since_last < self.match_cooldown:
+            time_since_last = timestamp_sec - getattr(self, 'last_match_time_sec', 0.0)
+            if time_since_last < getattr(self, 'match_cooldown', 1.0): # fallback to 1.0s if undefined
                 return
-        
 
-        data_matrix = np.array(msg.data, dtype=np.float32).reshape(-1, 7)
+        # 3. Reshape the rock data (now perfectly divisible by 7 again!)
+        data_matrix = np.array(rock_data, dtype=np.float32).reshape(-1, 7)
         
         # Extract Local Map (X, Y) and Sizes (Width, Length)
         local_pts = data_matrix[:, 1:3]
         local_sizes = data_matrix[:, 4:6]
             
         if len(local_pts) < 5:
-            return # Need at least a triangle to match
+            return # Need at least a pentagon of rocks to match safely
 
-        # 3. Prepare Input for Matcher
+        # 4. Prepare Input for Matcher
         sim_input = {
             'observed_vectors': local_pts,
             'observed_sizes': local_sizes,
             'n_false': int(len(local_pts) * 0.2) # Assume 80% match
         }
-        min_inliers = len(local_pts)*0.5
-        # 3. Run Geometric Matcher
+        min_inliers = len(local_pts) * 0.5
+        
+        # 5. Run Geometric Matcher
         result = identify_geometric(
             sim_input, 
             self.catalog_dict,
@@ -134,20 +138,24 @@ class RockMatcherNode(Node):
         )
 
         best = result.get('best_solution')
-        self.last_match_time_sec = current_msg_time_sec
-        # 4. If Match Found, Publish Global Pose
+        self.last_match_time_sec = timestamp_sec
+        
+        # 6. If Match Found, Publish Global Pose using the ORIGINAL timestamp
         if best and best['inlier_count'] >= min_inliers:
-            self.publish_global_pose(best, current_time.to_msg())
-            self.get_logger().info("Found Match!")
+            
+            self.publish_global_pose(best)
+            self.get_logger().info(f"Found Match! Propagating timestamp: {timestamp_sec:.2f}")
+            
             global_pts = self.catalog_dict['catalog_vectors']
             global_sizes = self.catalog_dict['catalog_sizes']
             
             # Run the plotting function in the background
             self.save_debug_plot(global_pts, global_sizes, local_pts, local_sizes, best)
+            
         elif best:
             self.get_logger().info(f"No confident match found in this frame. Best: {best['inlier_count']}")
             
-    def publish_global_pose(self, best, timestamp):
+    def publish_global_pose(self, best):
         """Converts the RANSAC transform into the ROVER'S global pose."""
         t = best['t']
         R = best['R']
@@ -156,7 +164,7 @@ class RockMatcherNode(Node):
         try:
             # FIX: Use rclpy.time.Time() to get the latest available transform
             trans = self.tf_buffer.lookup_transform(
-                'odom', 'base_link', rclpy.time.Time()
+                'odom', 'base_footprint', rclpy.time.Time()
             )
             
             rover_x_local = trans.transform.translation.x
@@ -183,7 +191,7 @@ class RockMatcherNode(Node):
 
         # 3. Build the Pose Message
         msg = PoseWithCovarianceStamped()
-        msg.header.stamp = timestamp
+        msg.header.stamp = trans.header.stamp
         msg.header.frame_id = "odom"
         
         # Set the TRUE Global Translation of the rover

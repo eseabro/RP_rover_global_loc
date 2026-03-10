@@ -42,6 +42,9 @@ class MapExporter(Node):
             return
 
         self.rock_memory.clear()
+        
+        stamp = msg.markers[0].header.stamp
+        timestamp_float = stamp.sec + (stamp.nanosec / 1e9)
 
         # 1. Process Markers Directly
         for marker in msg.markers:
@@ -65,14 +68,14 @@ class MapExporter(Node):
         self.draw_map()
         
         # Publish Map Data
-        self.publish_map_data()
+        self.publish_map_data(timestamp_float)
 
-    def publish_map_data(self):
+    def publish_map_data(self, timestamp):
         if not self.rock_memory:
             return
             
         msg = Float32MultiArray()
-        flat_data = []
+        flat_data = [float(timestamp)]
         
         for rock_id, points in self.rock_memory.items():
             pts_np = np.array(points)

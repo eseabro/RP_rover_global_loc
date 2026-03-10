@@ -52,7 +52,8 @@ def generate_launch_description():
     )
     slam_node = Node(
         package='rover_slam',
-        executable='slam_node'
+        executable='slam_node',
+        parameters=[{'use_sim_time': True}]
     )
     
     rect = IncludeLaunchDescription(
