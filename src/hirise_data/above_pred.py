@@ -124,11 +124,11 @@ def process_satellite_tiled(image_path, model_path, output_csv, output_image=Non
 
 if __name__ == "__main__":
     # Replace these paths with your actual files
-    world_name = "marsyard2020"
+    world_name = "marsyard_cnes2"
     img_file = f"gazebo_imgs/{world_name}.jpg"
     model_file = "above_rocks.pt" # Your trained model
     out_csv = f"{world_name}_sat.csv"
-    out_img = f"{world_name}_masks.jpg"  # <--- New image output path
+    out_img = f"{world_name}_masks.jpg"
     
     try:
         process_satellite_tiled(img_file, model_file, out_csv, output_image=out_img, tile_size=1024)

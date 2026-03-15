@@ -32,9 +32,10 @@ class Controller(Node):
 
         self.motor_wheel_pub = self.create_publisher(Float64MultiArray, '/wheel_controller/commands', 1)
         self.servo_pub = self.create_publisher(JointTrajectory, '/servo_controller/joint_trajectory', 1)
-        self.odom_pub = self.create_publisher(Odometry, '/wheel_odom', 10)
+        self.wheel_pub = self.create_publisher(Odometry, '/wheel_odom', 10)
         self.path_pub = self.create_publisher(Path, '/wheel_path', 10)
-        
+        self.odom_pub = self.create_publisher(Odometry, '/cmd_odom', 10)
+
         self.path_msg = Path()
         self.path_msg.header.frame_id = 'odom'
 
@@ -250,8 +251,48 @@ class Controller(Node):
         odom_msg.pose.covariance = self.cov_pose
         odom_msg.twist.covariance = self.cov_twist
         
-        self.odom_pub.publish(odom_msg)
+        self.wheel_pub.publish(odom_msg)
         
+        cmd_msg = Odometry()
+        cmd_msg.header.stamp = now.to_msg()
+        cmd_msg.header.frame_id = 'odom'
+        cmd_msg.child_frame_id = 'base_footprint'
+        
+        cmd_msg.pose.pose.position.x = self.x
+        cmd_msg.pose.pose.position.y = self.y
+        cmd_msg.pose.pose.position.z = self.z
+
+        quat = self.quat_init
+        cmd_msg.pose.pose.orientation = Quaternion(
+            x=quat[0], y=quat[1], z=quat[2], w=quat[3]
+        )
+
+        cmd_msg.twist.twist.linear.x = self.pri_velocity.linear.x
+        cmd_msg.twist.twist.linear.y = 0.0
+        cmd_msg.twist.twist.linear.z = 0.0
+        cmd_msg.twist.twist.angular.z = self.pri_velocity.angular.z
+        
+        cmd_msg.pose.covariance = [
+            0.0, 0.0,    0.0,    0.0,    0.0,    0.0,     # x
+            0.0,    0.0, 0.0,    0.0,    0.0,    0.0,     # y
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # z (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # roll (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # pitch (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0  # yaw
+        ]
+        
+        cmd_msg.twist.covariance = [
+            0.0, 0.0,    0.0,    0.0,    0.0,    0.0,     # x
+            0.0,    0.0, 0.0,    0.0,    0.0,    0.0,     # y
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # z (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # roll (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # pitch (unused)
+            0.0,    0.0,    0.0,    0.0,    0.0,    0.0 # yaw
+        ]
+        
+        self.odom_pub.publish(cmd_msg)
+        
+                
         pose_stamped = PoseStamped()
         pose_stamped.header.stamp = now.to_msg()
         pose_stamped.header.frame_id = 'odom'
@@ -260,7 +301,6 @@ class Controller(Node):
         self.path_msg.poses.append(pose_stamped)
         self.path_msg.header.stamp = now.to_msg()
         self.path_msg.header.frame_id = 'odom'
-        
         # Optional: Prevent the array from growing infinitely and crashing your RAM
         if len(self.path_msg.poses) > 5000:
             self.path_msg.poses.pop(0)
@@ -455,13 +495,53 @@ class Controller(Node):
             # Sync Initial Heading
             q = msg.pose.pose.orientation
             quat = [q.x, q.y, q.z, q.w]
-            import tf_transformations
-            _, _, yaw = tf_transformations.euler_from_quaternion(quat)
+            self.quat_init = quat
+            roll, pitch, yaw = euler_from_quaternion(quat)
+            self.roll = roll
+            self.pitch = pitch
             self.theta = yaw
             
             self.is_initialized = True
             self.get_logger().info(f"🎯 Synced to Ground Truth! Starting at X:{self.x:.2f}, Y:{self.y:.2f}, Yaw:{self.theta:.2f}")
 
+        
+            cmd_msg = Odometry()
+            cmd_msg.header.stamp = msg.header.stamp
+            cmd_msg.header.frame_id = 'odom'
+            cmd_msg.child_frame_id = 'base_footprint'
+
+            cmd_msg.pose.pose.position.x = self.x
+            cmd_msg.pose.pose.position.y = self.y
+            cmd_msg.pose.pose.position.z = self.z
+
+            cmd_msg.pose.pose.orientation = Quaternion(
+                x=quat[0], y=quat[1], z=quat[2], w=quat[3]
+            )
+
+            cmd_msg.twist.twist.linear.x = 0.0
+            cmd_msg.twist.twist.linear.y = 0.0
+            cmd_msg.twist.twist.linear.z = 0.0
+            cmd_msg.twist.twist.angular.z = 0.0
+            
+            cmd_msg.pose.covariance = [
+                0.0, 0.0,    0.0,    0.0,    0.0,    0.0,     # x
+                0.0,    0.0, 0.0,    0.0,    0.0,    0.0,     # y
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # z (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # roll (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # pitch (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0  # yaw
+            ]
+            
+            cmd_msg.twist.covariance = [
+                0.0, 0.0,    0.0,    0.0,    0.0,    0.0,     # x
+                0.0,    0.0, 0.0,    0.0,    0.0,    0.0,     # y
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # z (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # roll (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     # pitch (unused)
+                0.0,    0.0,    0.0,    0.0,    0.0,    0.0 # yaw
+            ]
+            
+            self.odom_pub.publish(cmd_msg)
 
 def main(args=None):
     rclpy.init(args=args)

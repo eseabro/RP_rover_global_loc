@@ -315,7 +315,7 @@ def identify_geometric(sim_result, catalog_dict,
                        max_candidates_per_inv=40,
                        min_seed_inliers=5,
                        early_exit_fraction=1.0,
-                       size_tolerance=0.85):
+                       size_tolerance=0.5):
     
     # 1. Clean Extraction: Trust the dictionary structure
     observed_pts_2d = sim_result['observed_vectors']
@@ -337,7 +337,7 @@ def identify_geometric(sim_result, catalog_dict,
     best = None
     eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
 
-    for _ in range(ransac_iters):
+    for i in range(ransac_iters):
         # Select random triangle
         tri_idx = all_obs_tris[rng.randint(0, len(all_obs_tris))]
         obs_pts3 = observed_pts_2d[list(tri_idx)]
@@ -369,7 +369,7 @@ def identify_geometric(sim_result, catalog_dict,
                 if len(tri_data) == 6 and o_areas:
                     ci, cj, ck, *c_areas = tri_data
                     ratios = [o_areas[i] / (c_areas[i] + 1e-6) for i in range(3)]
-                    if any(not (1.0 - size_tolerance < r < 1.0 + size_tolerance) for r in ratios):
+                    if any(not (1.0 - (size_tolerance * 3) < r < 1.0 + size_tolerance) for r in ratios):
                         continue
                     candidate_triangles.append((ci, cj, ck))
                 else:
@@ -387,7 +387,7 @@ def identify_geometric(sim_result, catalog_dict,
             s, R, t = est
 
             # Scoring: Coarse
-            in_cnt_init, inliers_init, rms_init, _, idxs_init = score_transform_with_rms(
+            in_cnt_init, inliers_init, _, _, _ = score_transform_with_rms(
                 observed_pts_2d, catalog_pts_2d, s, R, t, cat_tree, eps=eps_init)
 
             if in_cnt_init < min_seed_inliers: continue
@@ -414,6 +414,6 @@ def identify_geometric(sim_result, catalog_dict,
 
             # Early Exit check
             if best and best['inlier_count'] >= early_exit_fraction * (len(observed_pts_2d) - sim_result.get('n_false', 0)):
-                return {'best_solution': best}
+                return {'best_solution': best, 'iters': i+1, 'early_exit': True}
 
-    return {'best_solution': best}
+    return {'best_solution': best, 'iters': ransac_iters, 'early_exit': False}

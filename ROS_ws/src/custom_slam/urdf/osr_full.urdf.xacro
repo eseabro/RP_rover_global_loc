@@ -112,11 +112,13 @@
             </inertial>
         </link>
 
-        <joint name="arm_rotate_join_${prefix}" type="fixed">
+        <joint name="arm_rotate_join_${prefix}" type="revolute">
             <parent link="box_rotate"/>
             <origin rpy="0 0.0 0" xyz="0 ${dir*0.153} 0"/>
             <child link="arm_rotate_${prefix}"/>
             <axis xyz="0 1 0"/>
+            <limit effort="0" velocity="1.0" lower="-0.3" upper="0.3"/>
+            <dynamics damping="0.5" friction="0.1"/>
         </joint>
     </xacro:macro>
     <xacro:arm_rotate prefix="L" dir="1"/>
@@ -150,7 +152,9 @@
             <parent link="arm_rotate_${prefix}"/>
             <origin rpy="0 0 0" xyz="0.071558 ${dir*0.017545} -0.084292"/>
             <child link="turn_bukles_link_${prefix}"/>
-            <axis xyz="0 1 0"/>
+            <!-- <axis xyz="0 1 0"/>
+            <limit effort="0" velocity="1.0" lower="-0.3" upper="0.3"/>
+            <dynamics damping="0.5" friction="0.1"/> -->
         </joint>
 
     </xacro:macro>
@@ -179,11 +183,13 @@
             </inertial>
         </link>
 
-        <joint name="body_axis_joint_${prefix}" type="fixed">
+        <joint name="body_axis_joint_${prefix}" type="revolute">
             <parent link="turn_bukles_link_${prefix}"/>
             <origin rpy="0 0 0" xyz="0 ${dir*-0.060920} -0.001245"/>
             <child link="body_axis_link_${prefix}"/>
             <axis xyz="0 1 0"/>
+            <limit effort="0" velocity="1.0" lower="-0.3" upper="0.3"/>
+            <dynamics damping="0.5" friction="0.1"/>
         </joint>
 
     </xacro:macro>
@@ -219,8 +225,9 @@
             <parent link="body_axis_link_${prefix}"/>
             <origin rpy="0 0 0" xyz="0.016004 ${dir*0.071485} 0.001353"/>
             <child link="rocker_bogie_link_${prefix}_1"/>
-            <limit effort="10000.0" velocity="0.5" lower="-0.5" upper="0.5"/>
+            <!-- <limit effort="0" velocity="1.0" lower="-0.5" upper="0.5"/>
             <axis xyz="0 1 0"/>
+            <dynamics damping="0.5" friction="0.1"/> -->
         </joint>
 
         <link name="rocker_bogie_link_${prefix}_2">
@@ -569,80 +576,5 @@
         <origin xyz="0 0 0" rpy="-1.570796 0 -1.570796"/>
     </joint>
     <link name="right_camera_optical_frame"/>
-
-
-
-
-    <!-- <ros2_control name="RobotSystem" type="system">
-        <hardware>
-            <plugin>gz_ros2_control/GazeboSimSystem</plugin>
-        </hardware>
-
-        <joint name="rear_wheel_joint_right">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="rear_wheel_joint_left">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="middle_wheel_joint_right">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="middle_wheel_joint_left">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="front_wheel_joint_right">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="front_wheel_joint_left">
-            <command_interface name="velocity"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-
-
-        <joint name="front_wheel_joint_R">
-            <command_interface name="position"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="front_wheel_joint_L">
-            <command_interface name="position"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="rear_wheel_joint_R">
-            <command_interface name="position"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-        <joint name="rear_wheel_joint_L">
-            <command_interface name="position"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-        </joint>
-
-        <joint name="rocker_bogie_joint_L_2">
-            <command_interface name="effort"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-            <state_interface name="effort"/>
-        </joint>
-        <joint name="rocker_bogie_joint_R_2">
-            <command_interface name="effort"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-            <state_interface name="effort"/>
-        </joint>
-    </ros2_control> -->
 
 </robot>

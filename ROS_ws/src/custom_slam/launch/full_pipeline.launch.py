@@ -32,6 +32,12 @@ def generate_launch_description():
         executable='yolo_detector',
     )
     
+    perception_node = Node(
+        package='rover_perception',
+        executable='integrated_rock_perception',
+        parameters=[{'use_sim_time': True}]
+    )
+    
     exporter = Node(
         package='custom_slam',
         executable='map_exporter',
@@ -42,7 +48,8 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz',
         output='screen',
-        arguments=['-d', rviz_config_path]
+        arguments=['-d', rviz_config_path, '--ros-args', '--log-level', 'WARN'],
+        parameters=[{'use_sim_time': True}],
     )
     
     matcher = Node(
@@ -68,11 +75,12 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot,
-        detector_node,
-        yolo_node,
+        # detector_node,
+        # yolo_node,
+        perception_node,
         exporter,
         matcher,
         rviz_node,
         rect,
-        slam_node
+        # slam_node
     ])
