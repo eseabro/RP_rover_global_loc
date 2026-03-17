@@ -329,19 +329,32 @@ def identify_geometric(sim_result, catalog_dict,
         hash_index = build_geometric_hash_fast(catalog_pts_2d, catalog_sizes, binsize)
 
     # 3. Setup RANSAC
-    obs_indices = np.arange(len(observed_pts_2d))
-    all_obs_tris = list(itertools.combinations(obs_indices, 3))
+    # obs_indices = np.arange(len(observed_pts_2d))
+    # all_obs_tris = list(itertools.combinations(obs_indices, 3))
+    # cat_tree = KDTree(catalog_pts_2d)
+    # rng = np.random.RandomState() # Truly random now
+
+    # best = None
+    # eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
+
+    # for i in range(ransac_iters):
+        # Select random triangle
+        # tri_idx = all_obs_tris[rng.randint(0, len(all_obs_tris))]
+        # obs_pts3 = observed_pts_2d[list(tri_idx)]
+    # 3. Setup RANSAC
+    num_local_rocks = len(observed_pts_2d)
     cat_tree = KDTree(catalog_pts_2d)
-    rng = np.random.RandomState() # Truly random now
+    rng = np.random.RandomState(42) # <-- Added the 42 seed for deterministic debugging!
 
     best = None
     eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
 
     for i in range(ransac_iters):
-        # Select random triangle
-        tri_idx = all_obs_tris[rng.randint(0, len(all_obs_tris))]
-        obs_pts3 = observed_pts_2d[list(tri_idx)]
-
+        
+        # --- THE FIX: O(1) Memoryless Random Sampling ---
+        # Instantly pick 3 unique indices directly from the array length
+        tri_idx = rng.choice(num_local_rocks, 3, replace=False)
+        obs_pts3 = observed_pts_2d[tri_idx]
         # Find canonical order for deterministic matching
         obs_order = canonical_triangle_vertex_order(obs_pts3)
         o_a, o_b, o_c = [tri_idx[idx] for idx in obs_order]
@@ -385,6 +398,7 @@ def identify_geometric(sim_result, catalog_dict,
             if not est or not (0.8 <= est[0] <= 1.2): continue
             
             s, R, t = est
+            
 
             # Scoring: Coarse
             in_cnt_init, inliers_init, _, _, _ = score_transform_with_rms(
@@ -395,6 +409,8 @@ def identify_geometric(sim_result, catalog_dict,
             # Refinement
             s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers_init, s, R, t, cat_tree)
 
+            if not (0.9 < s_ref < 1.1):
+                continue
             # Scoring: Final with unique assignment
             in_cnt, inliers, rms, dists, assigned_idxs = score_transform_with_rms(
                 observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, cat_tree, eps=eps, return_assigned=True)

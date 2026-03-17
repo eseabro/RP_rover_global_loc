@@ -118,11 +118,11 @@ def generate_launch_description():
 
 
     spawn_after_gazebo = TimerAction(
-        period=3.0,  # seconds, adjust as needed
+        period=5.0,  # seconds, adjust as needed
         actions=[spawn]
     )
     control_after_spawn = TimerAction(
-        period=8.0,  # seconds, adjust as needed
+        period=10.0,  # seconds, adjust as needed
         actions=[controller]
     )
 
@@ -145,9 +145,9 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        DeclareLaunchArgument('x_pose', default_value='-0.0'),
-        DeclareLaunchArgument('y_pose', default_value='-0.0'),
-        DeclareLaunchArgument('z_pose', default_value='2.0'),
+        DeclareLaunchArgument('x_pose', default_value='-1.0'),
+        DeclareLaunchArgument('y_pose', default_value='-1.0'),
+        DeclareLaunchArgument('z_pose', default_value='1.5'),
         gazebo,
         gz_bridge,
         robot_state_publisher_node,
@@ -161,7 +161,7 @@ def generate_launch_description():
         ),
         RegisterEventHandler(
             event_handler=OnProcessExit(
-                target_action=spawn,
+                target_action=controller,
                 on_exit=[load_joint_state_controller],
             )
         ),

@@ -79,7 +79,7 @@ def generate_launch_description():
         # yolo_node,
         perception_node,
         exporter,
-        matcher,
+        # matcher,
         rviz_node,
         rect,
         # slam_node

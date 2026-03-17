@@ -50,6 +50,10 @@ qtcreator-*
 *.dae
 *.obj
 *.csv
+*.zip
+*.mcap
+*.db3
+
 
 src/hirise_data/Gazebo-*/*
 src/hirise_data/labeled_gazebo/*

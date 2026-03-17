@@ -4,6 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Global Options1
         - /MarkerArray1
       Splitter Ratio: 0.5
     Tree Height: 378
@@ -228,7 +229,7 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        raw_detections: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -479,7 +480,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
@@ -522,25 +523,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 6.109390735626221
+      Distance: 49.10663986206055
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.11473073065280914
-        Y: 0.5758317708969116
-        Z: 4.346236228942871
+        X: -12.181501388549805
+        Y: -7.055930137634277
+        Z: -4.327954292297363
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8247964978218079
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.0085625648498535
+      Yaw: 3.103557825088501
     Saved: ~
 Window Geometry:
   Displays:
