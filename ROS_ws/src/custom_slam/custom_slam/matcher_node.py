@@ -19,7 +19,7 @@ class RockMatcherNode(Node):
         super().__init__('rock_matcher_node')
         
         # --- Parameters ---
-        self.declare_parameter('global_map_path', '/home/ws/src/hirise_data/above_rock_analysis.csv')
+        self.declare_parameter('global_map_path', '/home/ws/src/hirise_data/marsyard2022_sat.csv')
         self.global_csv = self.get_parameter('global_map_path').get_parameter_value().string_value
 
         # Matcher Settings

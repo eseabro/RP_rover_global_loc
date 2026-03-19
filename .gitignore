@@ -7,6 +7,9 @@ lib/
 ROS_ws/src/custom_slam/images/
 msg_gen/
 srv_gen/
+icp-env/*
+.devcontainer/*
+src/rosbags/*
 msg/*Action.msg
 msg/*ActionFeedback.msg
 msg/*ActionGoal.msg

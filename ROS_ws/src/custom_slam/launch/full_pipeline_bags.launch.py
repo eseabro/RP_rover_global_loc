@@ -11,7 +11,6 @@ def generate_launch_description():
     pkg_custom_slam = get_package_share_directory('custom_slam')
     rviz_config_path = os.path.join(pkg_custom_slam, 'config', 'rviz_detector.rviz')
 
-    # --- THE FIX: Load the URDF and publish the 3D Meshes ---
     robot_fname = 'osr_full.urdf.xacro' # Change to 'osr.urdf.xacro' if that is your default
     xacro_file = os.path.join(pkg_custom_slam, 'urdf', robot_fname)
     robot_description = xacro.process_file(xacro_file).toxml()
@@ -68,7 +67,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        robot_state_publisher_node, # <--- Don't forget to add it to the list here!
+        # robot_state_publisher_node, 
         slam_node,
         matcher,
         odom_path,
