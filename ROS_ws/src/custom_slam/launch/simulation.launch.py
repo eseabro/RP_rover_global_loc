@@ -26,16 +26,16 @@ def generate_launch_description():
     gz_sim_pkg = get_package_share_directory('ros_gz_sim')
 
     # Correct paths
-    world = os.path.join(
-        get_package_share_directory('leo_gz_worlds'),
-        'worlds',
-        'marsyard2021.sdf'
-    )
     # world = os.path.join(
-    #     get_package_share_directory('custom_slam'),
+    #     get_package_share_directory('leo_gz_worlds'),
     #     'worlds',
-    #     'cnes_marsyard.sdf'
+    #     'marsyard2021.sdf'
     # )
+    world = os.path.join(
+        get_package_share_directory('custom_slam'),
+        'worlds',
+        'cnes_marsyard.sdf'
+    )
 
     ## Gazebo Harmonic
 
