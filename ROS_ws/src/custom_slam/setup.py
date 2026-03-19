@@ -53,7 +53,8 @@ setup(
             'image_saver = custom_slam.image_saver:main',
             'map_exporter = custom_slam.map_exporter:main',
             'matcher_node = custom_slam.matcher_node:main',
-            'odom_to_path = custom_slam.odom_to_path:main'
+            'odom_to_path = custom_slam.odom_to_path:main',
+            'fisheye_undistort_node = custom_slam.fisheye_undistort_node:main',
             
         ],
     },
