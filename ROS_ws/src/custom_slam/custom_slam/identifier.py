@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist, squareform
 def quant(x, binsize=0.01):
     return int(np.floor(x / binsize))
 
-def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, max_candidates_per_inv=40, k_neighbors=15):
+def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, max_candidates_per_inv=40, k_neighbors=30):
     """
     Optimized Geometric Hash Builder using K-Nearest Neighbors.
     Complexity: O(N * k^2) instead of O(N^3).
@@ -92,7 +92,11 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
                 else:
                     # Fallback if no sizes are provided (stores standard 3-item tuple)
                     bucket.append((ci, cj, ck))
-
+    # After building hash
+    for key in list(table.keys()):
+        if len(table[key]) > 50:
+            table[key] = table[key][:50]
+            
     return table
 
 
@@ -113,7 +117,7 @@ def greedy_unique_matches(dists, idxs, eps):
     inlier_mask = np.zeros(N, dtype=bool)
 
     # Create candidate list of (dist, obs_idx, cat_idx)
-    cand = [(float(dists[i]), i, int(idxs[i])) for i in range(N)]
+    cand = [(float(dists[i]), i, int(idxs[i])) for i in range(N) if dists[i] <= eps]
     cand.sort(key=lambda x: x[0])
 
     taken_cats = set()
@@ -127,7 +131,7 @@ def greedy_unique_matches(dists, idxs, eps):
     return inlier_mask, chosen_cat_for_obs, chosen_distances
 
 
-def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, return_assigned=False):
+def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, return_assigned=False, obs_sizes=None, cat_sizes=None, size_tol=0.5):
     """
     Nearest-neighbor scoring but enforce unique correspondences greedily.
     Returns: inlier_count, inlier_mask, rms, all_dists, assigned_idxs
@@ -138,6 +142,19 @@ def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, ret
     dists, idxs = tree.query(X, k=1)
     dists = dists[:, 0]
     idxs = idxs[:, 0]
+    
+    # --- THE FIX: Disqualify Size Mismatches! ---
+    if obs_sizes is not None and cat_sizes is not None:
+        for i in range(len(obs_pts)):
+            c_idx = idxs[i]
+            # Scale the local area by s^2 so it mathematically matches the global map
+            o_area = (obs_sizes[i][0] * obs_sizes[i][1]) * (s**2)
+            c_area = cat_sizes[c_idx][0] * cat_sizes[c_idx][1]
+            
+            linear_ratio = np.sqrt(o_area / (c_area + 1e-6))
+            if not (1.0 - size_tol < linear_ratio < 1.0 + size_tol):
+                dists[i] = np.inf  # Force RANSAC to throw this match in the trash!
+    # --------------------------------------------
 
     inlier_mask, chosen_cat_for_obs, chosen_dists = greedy_unique_matches(dists, idxs, eps)
 
@@ -197,9 +214,9 @@ def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, tree=None, eps_re
     H = A0.T @ B0
     U, _, Vt = np.linalg.svd(H)
     R_new = Vt.T @ U.T
-    if np.linalg.det(R_new) < 0:
-        Vt[-1, :] *= -1
-        R_new = Vt.T @ U.T
+    # if np.linalg.det(R_new) < 0:
+    #     Vt[-1, :] *= -1
+    #     R_new = Vt.T @ U.T
     t_new = cb - s_new * (R_new @ ca)
 
     return s_new, R_new, t_new
@@ -220,11 +237,11 @@ def estimate_similarity_from_triangle(A, B):
     U, _, Vt = np.linalg.svd(H)
     R = Vt.T @ U.T
 
-    # Ensure proper rotation (det = +1)
-    if np.linalg.det(R) < 0:
-        # fix reflection: flip last column of Vt (equivalently multiply V by diag(1, ..., -1))
-        Vt[-1, :] *= -1
-        R = Vt.T @ U.T
+    # # Ensure proper rotation (det = +1)
+    # if np.linalg.det(R) < 0:
+    #     # fix reflection: flip last column of Vt (equivalently multiply V by diag(1, ..., -1))
+    #     Vt[-1, :] *= -1
+    #     R = Vt.T @ U.T
 
     t = cb - s * (R @ ca)
     return s, R, t
@@ -278,7 +295,7 @@ def quantized_invariant(p, q, r, binsize=0.01):
         quant(ratio2, binsize),
         quant(angle_a, binsize),
         quant(angle_b, binsize),
-        quant(area_norm, binsize),
+        # quant(area_norm, binsize),
     )
 
 # --- helper: canonical vertex ordering for a triangle ---
@@ -344,17 +361,50 @@ def identify_geometric(sim_result, catalog_dict,
     # 3. Setup RANSAC
     num_local_rocks = len(observed_pts_2d)
     cat_tree = KDTree(catalog_pts_2d)
-    rng = np.random.RandomState(42) # <-- Added the 42 seed for deterministic debugging!
+    obs_tree = KDTree(observed_pts_2d)
+    rng = np.random.RandomState() # <-- Added the 42 seed for deterministic debugging!
 
     best = None
-    eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
+    # eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
+    eps_init = eps * 3
+
+    #---> FAST FIX 1: Pre-calculate all local neighbors ONCE <---
+    k_search = min(num_local_rocks, 15)
+    _, all_neighbors = obs_tree.query(observed_pts_2d, k=k_search)
 
     for i in range(ransac_iters):
+        # --- NEW RANSAC SAMPLING: O(1) Lookup ---
+        anchor_idx = rng.randint(0, num_local_rocks)
+        
+        # Grab precomputed neighbors (skip index 0, which is the rock itself)
+        neighbors = all_neighbors[anchor_idx, 1:] 
+        
+        if len(neighbors) < 2: continue
+        
+        # Faster than rng.choice(..., replace=False) for small arrays
+        idx1, idx2 = rng.choice(len(neighbors), 2, replace=False)
+        tri_idx = [anchor_idx, neighbors[idx1], neighbors[idx2]]
+        
+        obs_pts3 = observed_pts_2d[tri_idx]
         
         # --- THE FIX: O(1) Memoryless Random Sampling ---
         # Instantly pick 3 unique indices directly from the array length
-        tri_idx = rng.choice(num_local_rocks, 3, replace=False)
-        obs_pts3 = observed_pts_2d[tri_idx]
+        # tri_idx = rng.choice(num_local_rocks, 3, replace=False)
+        # obs_pts3 = observed_pts_2d[tri_idx]
+        
+        d1 = np.linalg.norm(obs_pts3[0] - obs_pts3[1])
+        d2 = np.linalg.norm(obs_pts3[1] - obs_pts3[2])
+        d3 = np.linalg.norm(obs_pts3[2] - obs_pts3[0])
+        
+        # Skipping Bad Triangles
+        lengths = np.array([d1, d2, d3])
+        a, b, c = np.sort(lengths)
+
+        # Reject degenerate shapes
+        if a / c < 0.15: continue
+        if c < 2.0: continue
+        
+        
         # Find canonical order for deterministic matching
         obs_order = canonical_triangle_vertex_order(obs_pts3)
         o_a, o_b, o_c = [tri_idx[idx] for idx in obs_order]
@@ -381,8 +431,9 @@ def identify_geometric(sim_result, catalog_dict,
                 # Optimized Size Filtering: Checks before any matrix math
                 if len(tri_data) == 6 and o_areas:
                     ci, cj, ck, *c_areas = tri_data
-                    ratios = [o_areas[i] / (c_areas[i] + 1e-6) for i in range(3)]
-                    if any(not (1.0 - (size_tolerance * 3) < r < 1.0 + size_tolerance) for r in ratios):
+                    # Take the square root here too!
+                    linear_ratios = [np.sqrt(o_areas[i] / (c_areas[i] + 1e-6)) for i in range(3)]
+                    if any(not (1.0 - size_tolerance < r < 1.0 + size_tolerance) for r in linear_ratios):
                         continue
                     candidate_triangles.append((ci, cj, ck))
                 else:
@@ -402,7 +453,8 @@ def identify_geometric(sim_result, catalog_dict,
 
             # Scoring: Coarse
             in_cnt_init, inliers_init, _, _, _ = score_transform_with_rms(
-                observed_pts_2d, catalog_pts_2d, s, R, t, cat_tree, eps=eps_init)
+                observed_pts_2d, catalog_pts_2d, s, R, t, cat_tree, eps=eps_init,
+                obs_sizes=observed_sizes, cat_sizes=catalog_sizes, size_tol=size_tolerance)
 
             if in_cnt_init < min_seed_inliers: continue
 
@@ -411,11 +463,14 @@ def identify_geometric(sim_result, catalog_dict,
 
             if not (0.9 < s_ref < 1.1):
                 continue
+            
             # Scoring: Final with unique assignment
             in_cnt, inliers, rms, dists, assigned_idxs = score_transform_with_rms(
-                observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, cat_tree, eps=eps, return_assigned=True)
+                observed_pts_2d, catalog_pts_2d, s_ref, R_ref, t_ref, cat_tree, eps=eps, return_assigned=True,
+                obs_sizes=observed_sizes, cat_sizes=catalog_sizes, size_tol=size_tolerance)
 
             if in_cnt < min_seed_inliers: continue
+            if rms > 0.5: continue
 
             # CONDENSED: Build matches directly from the scoring indices
             # No need for the extra cat_tree.query here anymore!
@@ -429,7 +484,7 @@ def identify_geometric(sim_result, catalog_dict,
                 }
 
             # Early Exit check
-            if best and best['inlier_count'] >= early_exit_fraction * (len(observed_pts_2d) - sim_result.get('n_false', 0)):
+            if best and best['inlier_count'] >= early_exit_fraction * (len(observed_pts_2d)):
                 return {'best_solution': best, 'iters': i+1, 'early_exit': True}
 
     return {'best_solution': best, 'iters': ransac_iters, 'early_exit': False}

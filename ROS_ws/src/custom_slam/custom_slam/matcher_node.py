@@ -20,15 +20,18 @@ class RockMatcherNode(Node):
     def __init__(self):
         super().__init__('rock_matcher_node')
         
+        self.world = 'CNES'
+        self.world = 2020
+        
         # --- Parameters ---
-        self.declare_parameter('global_map_path', '/home/ws/src/hirise_data/marsyard2022_sat.csv')
+        self.declare_parameter('global_map_path', '/home/ws/src/hirise_data/marsyard_cnes2_sat.csv')
         self.global_csv = self.get_parameter('global_map_path').get_parameter_value().string_value
 
         # Matcher Settings
-        self.eps = 0.5
-        self.binsize = 0.01
-        self.size_tol = 0.35
-
+        self.eps = 0.4  # 0.6 for 2021, 0.9 for 2022
+        self.binsize = 0.01 # before 0.01
+        self.size_tol = 0.4
+        
         # --- Load Global Catalog ---
         self.load_global_catalog()
 
@@ -43,8 +46,7 @@ class RockMatcherNode(Node):
             10
         )
 
-        
-        self.match_cooldown = 10.0
+        self.match_cooldown = 3.0
         self.last_match_time_sec = -999.0
         # Publisher for EKF integration (The "Rock GPS") x: -19.38592887840357 y: -12.515103795568585
         self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/rock_global_pose', 10)
@@ -70,9 +72,16 @@ class RockMatcherNode(Node):
                     sizes.append([w, l])
                     
             self.global_pts = np.array(pts, dtype=np.float32)
-
-            self.global_pts[:, 1] = -self.global_pts[:, 1] # negative sometimes?
             
+            if self.world == 2021 or self.world== 2020 or self.world=='CNES':
+                self.global_pts[:, 1] = -self.global_pts[:, 1] # negative sometimes?
+                self.global_pts[:, 0] = -self.global_pts[:, 0] # negative sometimes?
+                
+            elif self.world == 2022:
+                x_0 = self.global_pts[:, 0]
+                self.global_pts[:, 0] = -self.global_pts[:, 1] # negative sometimes?
+                self.global_pts[:, 1] = x_0
+                
             self.global_sizes = np.array(sizes, dtype=np.float32)
             
             self.catalog_dict = {
@@ -122,9 +131,10 @@ class RockMatcherNode(Node):
             rover_yaw_local = np.arctan2(siny_cosp, cosy_cosp)
             
         except Exception as e:
-            self.get_logger().warn(f"TF Traffic Jam! Skipping frame to catch up. ({e})")
+            self.get_logger().debug(f"TF Traffic Jam! Skipping frame to catch up. ({e})")
             return
-        # ══════════════════════════════════════════════════════════════
+        
+        # ------------------------------------
 
         # Unpack the EKF MarkerArray into Numpy lists
         local_pts_list = []
@@ -136,7 +146,9 @@ class RockMatcherNode(Node):
 
         local_pts = np.array(local_pts_list, dtype=np.float32)
         local_sizes = np.array(local_sizes_list, dtype=np.float32)
-            
+
+
+        # ------------------------
         if len(local_pts) < 5: return
 
         # 3. Prepare Input for Matcher
@@ -152,11 +164,11 @@ class RockMatcherNode(Node):
         map_size_meters = max(map_spread_x, map_spread_y)
         
         # 2. Scale EPS: Base is 0.8m. Add 3cm of tolerance for every 1 meter the map grows.
-        dynamic_eps = min(self.eps + (map_size_meters * 0.01), 2.0) # Cap at 3.0m to prevent hallucinations
-        self.get_logger().info(f"📏 Map Spread: {map_size_meters:.1f}m | Dynamic EPS: {dynamic_eps:.2f}")
+        dynamic_eps = min(self.eps + (map_size_meters * 0.005), 2.0) # Cap at 3.0m to prevent hallucinations used to be 0.01
+        self.get_logger().debug(f"📏 Map Spread: {map_size_meters:.1f}m | Dynamic EPS: {dynamic_eps:.2f}")
         
         
-        min_inliers = max(5, min(int(len(local_pts) * 0.70), 50))
+        min_inliers = max(6, min(int(len(local_pts) * 0.1), 50))
         
         # 4. Run Geometric Matcher
         result = identify_geometric(
@@ -165,9 +177,10 @@ class RockMatcherNode(Node):
             hash_index=self.global_hash,
             eps=dynamic_eps,
             binsize=self.binsize,
-            ransac_iters=3000,
+            ransac_iters=1000,
+            inv_neighbor_radius=0,
             min_seed_inliers=min_inliers,
-            early_exit_fraction=0.9,
+            early_exit_fraction=0.85,
             size_tolerance=self.size_tol
         )
 
@@ -182,21 +195,12 @@ class RockMatcherNode(Node):
 
         inliers = best['inlier_count']
         s = best.get('s', 1.0)
+        rms = best.get('rms', 0.0)
         
         # Log exactly how hard RANSAC worked!
         exit_reason = "EARLY EXIT" if early_exit else "MAX ITERATIONS"
-        self.get_logger().info(f"📊 DEBUG: RANSAC finished ({exit_reason} at {iters} iters) -> Best Inliers: {inliers}, Scale: {s:.2f}")
+        self.get_logger().info(f"📊 DEBUG: RANSAC finished ({exit_reason} at {iters} iters) -> Best Inliers: {inliers}/{len(local_pts)}, Scale: {s:.2f}, RMSE: {rms:.3f}m")
 
-        # Gate 1: Did it find enough rocks?
-        if inliers < min_inliers:
-            self.get_logger().warn(f"❌ REJECTED: Not enough inliers ({inliers} < {min_inliers}). Saving failure plot.")
-            self.save_debug_plot(self.catalog_dict['catalog_vectors'], self.catalog_dict['catalog_sizes'], 
-                                 local_pts, local_sizes, best)
-            return
-        
-        # --- SUCCESS BLOCK ---
-        self.get_logger().info(f"✅ SUCCESS! Propagating timestamp: {timestamp_sec:.2f}")
-        
         # Pass the historical stamp down the pipeline!
         self.publish_global_pose(best, trans, stamp)
         self.save_debug_plot(self.catalog_dict['catalog_vectors'], self.catalog_dict['catalog_sizes'], 
@@ -231,8 +235,9 @@ class RockMatcherNode(Node):
         # 3. NOW apply your intentional coordinate system hacks to the final output!
         # (Based on your previous code, you wanted the X axis negated)
         rover_global_x = float(pure_global_pos[1])
-        rover_global_y = -float(pure_global_pos[0])
-        
+        rover_global_y = float(pure_global_pos[0])
+        # rover_global_x = float(pure_global_pos[0])
+        # rover_global_y = float(pure_global_pos[1]) 
         # Keep your custom yaw math exactly the same!
         map_yaw = np.arctan2(R[1, 0], R[0, 0])
         pure_global_yaw = rover_yaw_local + map_yaw
@@ -240,7 +245,6 @@ class RockMatcherNode(Node):
         rover_global_yaw = (rover_global_yaw + np.pi) % (2 * np.pi) - np.pi
         
 
-        
         # ══════════════════════════════════════════════════════════════
         # THE MATCHER-SIDE GATE
         # ══════════════════════════════════════════════════════════════
@@ -256,12 +260,12 @@ class RockMatcherNode(Node):
         # We are localized! Block any RANSAC hallucinations from being published.
         if phys_dist > 5.0: 
             self.get_logger().warn(f"🚫 Matcher Blocked Publish! Jump too large: {phys_dist:.1f}m > 5.0m")
-            return # Exits the function entirely. No message is sent to the EKF!
-            
+            return
+
         if abs(dyaw) > math.radians(45.0):
             self.get_logger().warn(f"🚫 Matcher Blocked Publish! Angle jump too large: {math.degrees(dyaw):.1f}°")
             return
-            
+
         # Build the Pose Message
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = stamp
@@ -300,14 +304,9 @@ class RockMatcherNode(Node):
             transformed_local_sizes = local_sizes * s
 
             fig, ax = plt.subplots(figsize=(10, 10))
+            ax.invert_xaxis()
 
-            # 1. Draw Global Rocks (Solid gray ellipses)
-            for i in range(len(global_pts)):
-                x, y = global_pts[i]
-                w, l = global_sizes[i]
-                disp_w, disp_l = max(w, 0.05), max(l, 0.05)
-                ax.add_patch(Ellipse((x, y), width=disp_w, height=disp_l, 
-                                     color='lightgray', alpha=0.6, ec='gray'))
+
 
             # Calculate the RANSAC map rotation in degrees
             map_yaw_deg = np.degrees(np.arctan2(R[1, 0], R[0, 0]))
@@ -316,12 +315,40 @@ class RockMatcherNode(Node):
             for i in range(len(transformed_local_pts)):
                 x, y = transformed_local_pts[i]
                 w, l = transformed_local_sizes[i]
+                
+                # The max() prevents Matplotlib from crashing if a rock size is exactly 0
                 disp_w, disp_l = max(w, 0.05), max(l, 0.05)
                 
+                # THE FIX: Use fill=False and edgecolor='orange' to make the ovals visible!
                 ax.add_patch(Ellipse((x, y), width=disp_w, height=disp_l, angle=map_yaw_deg,
-                                     color='none', ec='orange', lw=2, linestyle='--'))
-                ax.scatter(x, y, c='orange', marker='x', s=30)
+                                     fill=False, edgecolor='orange', lw=2, linestyle='--'))
+                
+                # We leave the uniform scatter 'x' here just to mark the exact center!
+                ax.scatter(x, y, c='orange', marker='x', s=5)
 
+
+            matches = best_solution.get('matches', [])
+            for match in matches:
+                # Your identifier returns a tuple: (global_idx, local_idx, distance)
+                g_idx, l_idx = int(match[0]), int(match[1])
+                
+                gx, gy = global_pts[g_idx]
+                lx, ly = transformed_local_pts[l_idx]
+                
+                # Draw a bright green line connecting the local rock to its global target
+                ax.plot([gx, lx], [gy, ly], color='lime', linewidth=1)
+                
+                # Highlight the chosen global rock with a green square
+                ax.scatter(gx, gy, c='lime', marker='s', s=20, edgecolors='black')
+                
+
+            # 1. Draw Global Rocks (Solid gray ellipses)
+            for i in range(len(global_pts)):
+                x, y = global_pts[i]
+                w, l = global_sizes[i]
+                disp_w, disp_l = max(w, 0.05), max(l, 0.05)
+                ax.add_patch(Ellipse((x, y), width=disp_w, height=disp_l, 
+                                     color='lightgray', alpha=0.6, ec='gray'))
             # ══════════════════════════════════════════════════════════════
             # 3. Draw the Rover (The Blue Circle)
             # ══════════════════════════════════════════════════════════════
@@ -333,7 +360,7 @@ class RockMatcherNode(Node):
                 
                 # Plot a distinct blue circle with a white border
                 ax.scatter(rover_global[0], rover_global[1], 
-                           c='blue', marker='o', s=150, edgecolors='white', 
+                           c='blue', marker='o', s=50, edgecolors='white', 
                            linewidth=2, zorder=5, label='Rover')
                 ax.legend(loc='upper right')
             # ══════════════════════════════════════════════════════════════
