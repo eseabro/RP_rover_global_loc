@@ -114,6 +114,7 @@ def main():
         '/ground_truth/odom',
         '/wheel_odom',
         '/cmd_odom',
+        '/ekf/odom',
         '/rock_global_pose',
         '/matcher/stats',
     ]
@@ -143,7 +144,7 @@ def main():
         write_csv(os.path.join(args.out, 'ground_truth.csv'), POSE_HEADER, rows)
 
     # ── Odometry ─────────────────────────────────────────────────
-    odom_topic = args.odom_topic or ('/cmd_odom' if messages['/cmd_odom'] else '/wheel_odom')
+    odom_topic = args.odom_topic or ('/ekf/odom' if messages['/ekf/odom'] else '/cmd_odom')
     if odom_topic and messages.get(odom_topic):
         rows = [pose_row_from_odometry(m) for m in messages[odom_topic]]
         write_csv(os.path.join(args.out, 'wheel_odom.csv'), POSE_HEADER, rows)

@@ -45,7 +45,7 @@ def generate_launch_description():
     custom_stereo_rectifier = Node(
         package='custom_slam', # Replace with wherever you put your custom undistort node
         executable='fisheye_undistort_node', 
-        name='fisheye_stereo',
+        name='fisheye_undistort_node',
         parameters=[{'use_sim_time': use_sim_time}],
     )
 

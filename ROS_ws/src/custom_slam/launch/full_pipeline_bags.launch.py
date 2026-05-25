@@ -42,11 +42,11 @@ def generate_launch_description():
     )
 
     # 3. Path Visualizer
-    odom_path = Node(
-        package='custom_slam',
-        executable='odom_to_path',
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
+    # odom_path = Node(
+    #     package='custom_slam',
+    #     executable='odom_to_path',
+    #     parameters=[{'use_sim_time': use_sim_time}]
+    # )
 
     # 4. Map Exporter
     exporter = Node(
@@ -69,8 +69,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         # robot_state_publisher_node, 
         slam_node,
-        matcher,
-        odom_path,
+        # matcher,
+        # odom_path,
         exporter,
-        rviz_node
+        # rviz_node
     ])

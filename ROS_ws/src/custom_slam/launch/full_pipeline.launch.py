@@ -5,6 +5,8 @@ from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch.actions import TimerAction
 import os
+from launch.actions import RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 
 
 def generate_launch_description():
@@ -62,6 +64,11 @@ def generate_launch_description():
         executable='slam_node',
         parameters=[{'use_sim_time': True}]
     )
+    slam_delayed = TimerAction(
+        period=15.0,  # seconds, adjust as needed
+        actions=[slam_node]
+    )
+    
     
     rect = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(stereo_launch_path),
@@ -78,9 +85,9 @@ def generate_launch_description():
         # detector_node,
         # yolo_node,
         perception_node,
-        exporter,
+        # exporter,
         # matcher,
-        rviz_node,
+        # rviz_node,
         rect,
-        # slam_node
+        # slam_delayed
     ])

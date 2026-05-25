@@ -1,0 +1,20 @@
+{
+  "EKF + Matcher": {
+    "Distance Travelled [m]": 90.67,
+    "Duration [s]": 1374.8,
+    "Odom ATE RMSE 2D [m]": 0.9738,
+    "Odom End Position Error [m]": 0.91,
+    "ATE RMSE 2D [m]": 0.9738,
+    "ATE Mean 2D [m]": 0.8329,
+    "ATE Max 2D [m]": 1.7119,
+    "ATE Std 2D [m]": 0.5045,
+    "RPE RMSE [m]": 0.0447,
+    "RPE Mean [m]": 0.0251,
+    "End Position Error [m]": 0.91,
+    "3\u03c3 Consistent X [%]": 93.1,
+    "3\u03c3 Consistent Y [%]": 47.5,
+    "ATE Improvement vs Odom [%]": 0.0,
+    "Global Corrections": "N/A",
+    "Mean Correction Magnitude [m]": "N/A"
+  }
+}

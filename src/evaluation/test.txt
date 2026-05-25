@@ -1,0 +1,4 @@
+python3 /home/ws/src/evaluation/run_all_2.py \
+    --csv_dir /home/ws/results/MY2022_KF_Matcher/csv \
+    --out /home/ws/results/MY2022_KF_Matcher/ \
+    --skip_extract

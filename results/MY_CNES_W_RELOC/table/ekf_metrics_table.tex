@@ -1,0 +1,37 @@
+\begin{table}[htbp]
+\centering
+\caption{EKF-SLAM Evaluation Metrics}
+\label{tab:ekf_results}
+\begin{tabular}{lc}
+\toprule
+Metric & \textbf{EKF + Matcher} \\
+\midrule
+\multicolumn{2}{l}{\textit{Trajectory}} \\
+Distance Travelled [m] & 71.0300 \\
+Duration [s] & 501.3000 \\
+\midrule
+\multicolumn{2}{l}{\textit{EKF Performance}} \\
+ATE RMSE 2D [m] & 1.1653 \\
+ATE Mean 2D [m] & 1.0428 \\
+ATE Max 2D [m] & 1.7980 \\
+ATE Std 2D [m] & 0.5202 \\
+RPE RMSE [m] & 0.0396 \\
+RPE Mean [m] & 0.0270 \\
+End Position Error [m] & 1.7851 \\
+ATE Improvement vs Odom [\%] & 0.0000 \\
+\midrule
+\multicolumn{2}{l}{\textit{Baseline}} \\
+Odom ATE RMSE 2D [m] & 1.1653 \\
+Odom End Position Error [m] & 1.7851 \\
+\midrule
+\multicolumn{2}{l}{\textit{Filter Consistency}} \\
+3σ Consistent X [\%] & 100.0000 \\
+3σ Consistent Y [\%] & 73.6000 \\
+\midrule
+\multicolumn{2}{l}{\textit{Global Relocalization}} \\
+Global Corrections & N/A \\
+Mean Correction Magnitude [m] & N/A \\
+\midrule
+\bottomrule
+\end{tabular}
+\end{table}

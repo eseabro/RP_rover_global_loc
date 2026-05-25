@@ -152,7 +152,7 @@ def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, ret
             c_area = cat_sizes[c_idx][0] * cat_sizes[c_idx][1]
             
             linear_ratio = np.sqrt(o_area / (c_area + 1e-6))
-            if not (1.0 - size_tol < linear_ratio < 1.0 + size_tol):
+            if not (1.0 - size_tol*2 < linear_ratio < 1.0 + size_tol):
                 dists[i] = np.inf  # Force RANSAC to throw this match in the trash!
     # --------------------------------------------
 
@@ -183,7 +183,7 @@ def invariant_neighbors(inv, radius=1):
 def apply_similarity(pts, s, R, t):
     return (s * (pts @ R.T)) + t
 
-def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, tree=None, eps_refine=10.0):
+def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, distances_to_rover, tree=None, eps_refine=10.0):
     """
     Refit similarity transform using unique correspondences from the current transform.
     Steps:
@@ -199,13 +199,14 @@ def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, tree=None, eps_re
     if len(idxs_obs) < 2:
         return s, R, t
 
+    w = (1.0 / (distances_to_rover[idxs_obs] + 1.0)**2)
+    w = w / w.sum()
     A = obs_pts[idxs_obs]
     B = cat_pts[assigned[idxs_obs]]
-
-    ca = A.mean(axis=0)
-    cb = B.mean(axis=0)
-    A0 = A - ca
-    B0 = B - cb
+    ca = (w[:, None] * A).sum(axis=0)
+    cb = (w[:, None] * B).sum(axis=0)
+    A0 = (A - ca) * np.sqrt(w)[:, None]
+    B0 = (B - cb) * np.sqrt(w)[:, None]
     na = np.linalg.norm(A0)
     nb = np.linalg.norm(B0)
     if na < 1e-12 or nb < 1e-12:
@@ -332,7 +333,9 @@ def identify_geometric(sim_result, catalog_dict,
                        max_candidates_per_inv=40,
                        min_seed_inliers=5,
                        early_exit_fraction=1.0,
-                       size_tolerance=0.5):
+                       size_tolerance=0.5,
+                       prior_pos=None,       # <--- Pass the EKF position!
+                       prior_radius=None):
     
     # 1. Clean Extraction: Trust the dictionary structure
     observed_pts_2d = sim_result['observed_vectors']
@@ -346,19 +349,6 @@ def identify_geometric(sim_result, catalog_dict,
         hash_index = build_geometric_hash_fast(catalog_pts_2d, catalog_sizes, binsize)
 
     # 3. Setup RANSAC
-    # obs_indices = np.arange(len(observed_pts_2d))
-    # all_obs_tris = list(itertools.combinations(obs_indices, 3))
-    # cat_tree = KDTree(catalog_pts_2d)
-    # rng = np.random.RandomState() # Truly random now
-
-    # best = None
-    # eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
-
-    # for i in range(ransac_iters):
-        # Select random triangle
-        # tri_idx = all_obs_tris[rng.randint(0, len(all_obs_tris))]
-        # obs_pts3 = observed_pts_2d[list(tri_idx)]
-    # 3. Setup RANSAC
     num_local_rocks = len(observed_pts_2d)
     cat_tree = KDTree(catalog_pts_2d)
     obs_tree = KDTree(observed_pts_2d)
@@ -368,13 +358,23 @@ def identify_geometric(sim_result, catalog_dict,
     # eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
     eps_init = eps * 3
 
-    #---> FAST FIX 1: Pre-calculate all local neighbors ONCE <---
+    # Pre-calculate all local neighbors ONCE <---
     k_search = min(num_local_rocks, 15)
     _, all_neighbors = obs_tree.query(observed_pts_2d, k=k_search)
+        
+    # 2. Assign a mathematical weight using the Inverse Square Law.
+    #    (We add 1.0 so a rock at 0.1m doesn't get an infinite/massive weight)
+    if prior_pos is not None:
+        delta = observed_pts_2d - np.asarray(prior_pos)
+    else:
+        delta = observed_pts_2d  # fallback to old (broken) behaviour
+    distances_to_rover = np.linalg.norm(delta, axis=1)
+    weights = np.exp(-distances_to_rover / 4.0)
+    anchor_probs = weights / np.sum(weights)
 
     for i in range(ransac_iters):
         # --- NEW RANSAC SAMPLING: O(1) Lookup ---
-        anchor_idx = rng.randint(0, num_local_rocks)
+        anchor_idx = rng.choice(num_local_rocks, p=anchor_probs)
         
         # Grab precomputed neighbors (skip index 0, which is the rock itself)
         neighbors = all_neighbors[anchor_idx, 1:] 
@@ -401,9 +401,8 @@ def identify_geometric(sim_result, catalog_dict,
         a, b, c = np.sort(lengths)
 
         # Reject degenerate shapes
-        if a / c < 0.15: continue
-        if c < 2.0: continue
-        
+        if a / c < 0.2: continue
+        if c < 1.0: continue
         
         # Find canonical order for deterministic matching
         obs_order = canonical_triangle_vertex_order(obs_pts3)
@@ -450,6 +449,9 @@ def identify_geometric(sim_result, catalog_dict,
             
             s, R, t = est
             
+            # if prior_pos is not None and prior_radius is not None:
+            #     if np.linalg.norm(t - prior_pos) > prior_radius:
+            #         continue    
 
             # Scoring: Coarse
             in_cnt_init, inliers_init, _, _, _ = score_transform_with_rms(
@@ -459,9 +461,9 @@ def identify_geometric(sim_result, catalog_dict,
             if in_cnt_init < min_seed_inliers: continue
 
             # Refinement
-            s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers_init, s, R, t, cat_tree)
+            s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers_init, s, R, t, distances_to_rover, cat_tree)
 
-            if not (0.9 < s_ref < 1.1):
+            if not (0.85 < s_ref < 1.15):
                 continue
             
             # Scoring: Final with unique assignment

@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg    
 
 # --- CONFIGURATION ---
-INPUT_CSV = 'marsyard_cnes2_sat.csv'
-OUTPUT_CSV = 'marsyard_cnes2_sat_aligned.csv'
-IMAGE_PATH = 'marsyard_cnes.jpeg' # <-- UPDATE THIS with your image file
+INPUT_CSV = 'marsyard2022_sat.csv'
+OUTPUT_CSV = 'marsyard2022_sat_adjusted.csv'
+IMAGE_PATH = 'marsyard2022_masks.jpg' # <-- UPDATE THIS with your image file
 # 1. The Rotation (in degrees)
 # Positive = Counter-Clockwise (Standard ROS ENU)
 # 1. Image & Physical Scale (The New Math!)
-IMG_WIDTH_PX = 733
-IMG_HEIGHT_PX = 508
+IMG_WIDTH_PX = 6000#733
+IMG_HEIGHT_PX = 6000#508
 IMG_WIDTH_M = 83.0   # Physical meters across the width of the image
 IMG_HEIGHT_M = 57.0  # Physical meters across the height of the image
 # Negative = Clockwise
@@ -26,8 +26,8 @@ FLIP_Y = -1
 
 # 3. The Translation (Shift)
 # How far is the true center of the Mars Yard from the Gazebo (0,0) origin?
-X_OFFSET = 7  # meters
-Y_OFFSET = -40  # meters
+X_OFFSET = 0 #7  # meters
+Y_OFFSET = 0#-40  # meters
 
 # --- PRE-COMPUTE MATH ---
 theta = math.radians(ROTATION_DEG)
@@ -73,8 +73,6 @@ with open(INPUT_CSV, mode='r') as infile, open(OUTPUT_CSV, mode='w', newline='')
         
         # Get pixels for the overlay plot
         u, v = map_to_pixel(mx, my)
-        rock_u.append(u)
-        rock_v.append(v)
         
         # 1. Rotate
         rot_x = (mx * cos_t) - (my * sin_t)
@@ -87,6 +85,8 @@ with open(INPUT_CSV, mode='r') as infile, open(OUTPUT_CSV, mode='w', newline='')
         # 3. Translate to Gazebo
         final_x = flip_x + X_OFFSET
         final_y = flip_y + Y_OFFSET
+        rock_u.append(u)
+        rock_v.append(v)
         
         row['Map_X'] = round(final_x, 4)
         row['Map_Y'] = round(final_y, 4)
@@ -114,17 +114,21 @@ except FileNotFoundError:
     plt.ylim(IMG_HEIGHT_PX, 0)
 
 # Plot the raw rocks in pixel space
-plt.scatter(rock_u, rock_v, c='cyan', marker='.', alpha=0.8, label='Mapped Rocks')
 
-# Plot the Gazebo Origin and Axes overlay
-plt.scatter(origin_u, origin_v, c='red', marker='*', s=300, label='Gazebo Origin (0,0)', zorder=5)
+# Plot the rotated/flipped rocks
+plt.scatter(rock_u, rock_v, c='blue', marker='.', s=100, alpha=0.8, label='Adjusted Rocks (Gazebo Frame)')
 
-# Draw the Gazebo X-axis (Red) and Y-axis (Green)
-plt.plot([origin_u, x_axis_u], [origin_v, x_axis_v], c='red', linewidth=3, label='Gazebo +X (10m Forward)')
-plt.plot([origin_u, y_axis_u], [origin_v, y_axis_v], c='green', linewidth=3, label='Gazebo +Y (10m Left)')
+# Plot the Gazebo Origin (0,0)
+plt.scatter(0, 0, c='red', marker='*', s=300, label='Gazebo Origin (0,0)', zorder=5)
 
-plt.title(f"Gazebo Coordinate System Overlay\nRot: {ROTATION_DEG}°, Offset: ({X_OFFSET}, {Y_OFFSET})")
-plt.xlabel("Image U (Pixels)")
-plt.ylabel("Image V (Pixels)")
+# Add Gazebo frame axes lines
+plt.axhline(0, color='black', linewidth=1.5, linestyle='--')
+plt.axvline(0, color='black', linewidth=1.5, linestyle='--')
+
+plt.title(f"Final Rock Output in Gazebo Frame\nRot: {ROTATION_DEG}°, Flip X/Y: ({FLIP_X}, {FLIP_Y}), Offset: ({X_OFFSET}, {Y_OFFSET})")
+plt.xlabel("Gazebo +X (meters) [Forward]")
+plt.ylabel("Gazebo +Y (meters) [Left]")
+plt.axis('equal')  # CRITICAL: Keeps physical proportions 1:1
+plt.grid(True, linestyle=':', alpha=0.7)
 plt.legend()
 plt.show()
