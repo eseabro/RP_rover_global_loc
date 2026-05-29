@@ -41,13 +41,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 3. Path Visualizer
-    # odom_path = Node(
-    #     package='custom_slam',
-    #     executable='odom_to_path',
-    #     parameters=[{'use_sim_time': use_sim_time}]
-    # )
-
     # 4. Map Exporter
     exporter = Node(
         package='custom_slam',

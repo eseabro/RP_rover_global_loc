@@ -26,7 +26,6 @@ class RockMatcherNode(Node):
         
         # --- Parameters ---
         MY = 'CNES'
-        # self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_42m_sat.csv')
         self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_sat.csv')
         self.global_csv = self.get_parameter('global_map_path').get_parameter_value().string_value
 
@@ -51,10 +50,12 @@ class RockMatcherNode(Node):
 
         self.match_cooldown = 3.0
         self.last_match_time_sec = -999.0
+        
         # Publisher for EKF integration (The "Rock GPS") x: -19.38592887840357 y: -12.515103795568585
         self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/rock_global_pose', 10)
         
         self.get_logger().info(f"Rock Matcher Node Started with eps={self.eps} and binsize={self.binsize}. Ready to localize.")
+        
         # --- PERFORMANCE LOGGING SETUP ---
         self.metrics_file_path = os.path.expanduser(f'/home/ws/src/matcher_csvs/MY{MY}.csv')
         file_exists = os.path.exists(self.metrics_file_path)
@@ -90,13 +91,8 @@ class RockMatcherNode(Node):
                     
             self.global_pts = np.array(pts, dtype=np.float32)
             
-            self.global_pts[:, 1] = -self.global_pts[:, 1] # negative sometimes?
-            self.global_pts[:, 0] = -self.global_pts[:, 0] # negative sometimes?
-                
-            # elif self.world == 2022:
-            #     x_0 = self.global_pts[:, 0]
-            #     self.global_pts[:, 0] = -self.global_pts[:, 1] # negative sometimes?
-            #     self.global_pts[:, 1] = x_0
+            self.global_pts[:, 1] = -self.global_pts[:, 1]
+            self.global_pts[:, 0] = -self.global_pts[:, 0]
                 
             self.global_sizes = np.array(sizes, dtype=np.float32)
             
@@ -132,19 +128,9 @@ class RockMatcherNode(Node):
             if time_since_last < self.match_cooldown: 
                 return
 
-        # ══════════════════════════════════════════════════════════════
-        # FIX 1: LOOK UP TF IMMEDIATELY (FAIL FAST)
-        # ══════════════════════════════════════════════════════════════
         try:
-            # Look up the EKF's position instantly to avoid doing RANSAC if TF isn't ready!
-            # Make sure we use 'ekf_base_footprint' since we separated the robots earlier.
             trans = self.tf_buffer.lookup_transform('map', 'ekf_base_footprint', stamp)
             rover_vec = np.array([trans.transform.translation.x, trans.transform.translation.y])
-            
-            q = trans.transform.rotation
-            siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-            cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-            rover_yaw_local = np.arctan2(siny_cosp, cosy_cosp)
             
         except Exception as e:
             self.get_logger().debug(f"TF Traffic Jam! Skipping frame to catch up. ({e})")
@@ -162,30 +148,14 @@ class RockMatcherNode(Node):
             local_pts_list.append([marker.pose.position.x, marker.pose.position.y])
             local_sizes_list.append([marker.scale.x, marker.scale.y])
 
-            # if marker.color.a < 0.5: 
-            #     continue
-        # combined = list(zip(local_pts_list, local_sizes_list))
-        
-        # # 2. Sort by footprint area (width * length) in descending order
-        # combined.sort(key=lambda x: x[1][0] * x[1][1], reverse=True)
-        
-        # # 3. Slice off only the top 15 most massive rocks!
-        # top_rocks = combined[:50]
-        
-        # 4. Unzip back into numpy arrays
-        # ----------------------------------------------------
-        # The simple, direct numpy conversion (No sorting)
         local_pts = np.array(local_pts_list, dtype=np.float32)
         local_sizes = np.array(local_sizes_list, dtype=np.float32)
         if len(local_pts) < 5: return
 
-        # ══════════════════════════════════════════════════════════════
-        # THE HYBRID ACTIVE SUBMAP (Radius + Supplement)
-        # ══════════════════════════════════════════════════════════════
         if len(local_pts) > 10:
-            confidence_radius = 12.0  # Meters (Where stereo depth is flawless)
-            min_rocks = 30           # Minimum needed to keep RANSAC healthy
-            max_rocks = 50           # Safety cap to prevent CPU explosion
+            confidence_radius = 12.0 
+            min_rocks = 30 
+            max_rocks = 50 
             
             # 1. Calculate physical 2D distance of every rock to the rover
             distances = np.linalg.norm(local_pts - rover_vec, axis=1)
@@ -196,8 +166,7 @@ class RockMatcherNode(Node):
             # 3. Count how many rocks are naturally inside our safe stereo radius
             rocks_in_radius = int(np.sum(distances <= confidence_radius))
             
-            # 4. The Core Logic: Take the rocks in the radius, OR the minimum 
-            #    required amount (whichever number is larger!)
+            # 4. Take the rocks in the radius, OR the minimum required amount
             num_to_keep = max(rocks_in_radius, min_rocks)
             
             # 5. Cap it at max_rocks just in case we hit a massive dense cluster
@@ -218,29 +187,14 @@ class RockMatcherNode(Node):
             'observed_sizes': local_sizes,     
             'n_false': int(len(local_pts) * 0.2) 
         }
-        # ----------------------------------------------------
-
-        # if len(local_pts) < 5: return
-
-        # # 3. Prepare Input for Matcher
-        # sim_input = {
-        #     'observed_vectors': local_pts,     # <--- Use the numpy array!
-        #     'observed_sizes': local_sizes,     # <--- Use the numpy array!
-        #     'n_false': int(len(local_pts) * 0.2) 
-        # }
-        
-        map_spread_x = np.max(local_pts[:, 0]) - np.min(local_pts[:, 0])
-        map_spread_y = np.max(local_pts[:, 1]) - np.min(local_pts[:, 1])
-        map_size_meters = max(map_spread_x, map_spread_y)
-        
-        
+               
         
         map_spread_x = np.max(local_pts[:, 0]) - np.min(local_pts[:, 0])
         map_spread_y = np.max(local_pts[:, 1]) - np.min(local_pts[:, 1])
         map_size_meters = max(map_spread_x, map_spread_y)
         
         # 2. Scale EPS: Base is 0.8m. Add 3cm of tolerance for every 1 meter the map grows.
-        dynamic_eps = min(self.eps + (map_size_meters * 0.005), 1.0) # Cap at 3.0m to prevent hallucinations used to be 0.01
+        dynamic_eps = min(self.eps + (map_size_meters * 0.005), 1.0) 
         self.get_logger().debug(f"📏 Map Spread: {map_size_meters:.1f}m | Dynamic EPS: {dynamic_eps:.2f}")
         
         
@@ -260,8 +214,7 @@ class RockMatcherNode(Node):
             min_seed_inliers=min_inliers,
             early_exit_fraction=0.85,
             size_tolerance=self.size_tol,
-            prior_pos=rover_vec,       # <--- Pass the EKF position!
-            prior_radius=8
+            prior_pos=rover_vec
         )
         
         ransac_end = time.perf_counter()
@@ -271,7 +224,7 @@ class RockMatcherNode(Node):
         iters = result.get('iterations', 'MAX')
         early_exit = result.get('early_exit', False)
         self.last_match_time_sec = timestamp_sec
-        # --- THE UPDATED AUTOPSY DEBUG BLOCK ---
+
         if best is None:
             self.get_logger().warn(f"💀 DEBUG: RANSAC failed entirely after {iters} iterations. Sizes or eps are likely too strict!")
             return
@@ -280,7 +233,6 @@ class RockMatcherNode(Node):
         s = best.get('s', 1.0)
         rms = best.get('rms', 0.0)
         
-        # Log exactly how hard RANSAC worked!
         exit_reason = "EARLY EXIT" if early_exit else "MAX ITERATIONS"
         self.get_logger().debug(f"📊 DEBUG: RANSAC finished ({exit_reason} at {iters} iters) -> Best Inliers: {inliers}/{len(local_pts)}, Scale: {s:.2f}, RMSE: {rms:.3f}m")
 
@@ -298,9 +250,8 @@ class RockMatcherNode(Node):
             round(rms, 4), 
             'SUCCESS'
         ])
-        self.metrics_file.flush() # Force write to disk immediately
+        self.metrics_file.flush() 
 
-        # Pass the historical stamp down the pipeline!
         self.publish_global_pose(best, trans, stamp)
         self.save_debug_plot(self.catalog_dict['catalog_vectors'], self.catalog_dict['catalog_sizes'], 
                              local_pts, local_sizes, best, rover_vec)
@@ -328,38 +279,20 @@ class RockMatcherNode(Node):
             self.get_logger().warn(f"Could not get rover's local pose: {e}")
             return
 
-        
-        # 2. Pure matrix math (This calculates the exact coordinate seen in the plot)
-        pure_global_pos = (s * np.dot(R, rover_vec)) + t
- 
-        # 3. NOW apply your intentional coordinate system hacks to the final output!
-        # (Based on your previous code, you wanted the X axis negated)
         # 2. Pure matrix math (Calculates the exact coordinate in the CSV frame)
         pure_global_pos = (s * np.dot(R, rover_vec)) + t
-        
-        # Extract the pure rotation from RANSAC
-        map_yaw = np.arctan2(R[1, 0], R[0, 0])
-        pure_global_yaw = rover_yaw_local + map_yaw
-        
+                
         rover_global_x = float(pure_global_pos[1])
         rover_global_y = float(pure_global_pos[0])
-        # 3. APPLY A STRICT RIGID ROTATION (NO REFLECTIONS!)
-        # Depending on how your RViz is oriented, pick ONE of these two:
+
         F = np.array([[0, 1], [1, 0]])
         R_rot = F @ R                         # was R @ F
         map_yaw = np.arctan2(R_rot[1, 0], R_rot[0, 0])
         pure_global_yaw = rover_yaw_local + map_yaw
         rover_global_yaw = (pure_global_yaw + np.pi) % (2*np.pi) - np.pi
-        # OPTION A: 90-Degrees Clockwise
-        # rover_global_yaw = pure_global_yaw - (math.pi / 2.0)
-        
-        
-        # Normalize between -pi and pi
-        # rover_global_yaw = (rover_global_yaw + np.pi) % (2 * np.pi) - np.pi
-        
 
         # ══════════════════════════════════════════════════════════════
-        # THE MATCHER-SIDE GATE
+        # THE MATCHER GATE
         # ══════════════════════════════════════════════════════════════
         # 1. Compare the newly calculated global pose to the EKF's current TF pose
         dx = rover_global_x - rover_vec[0]
@@ -423,8 +356,6 @@ class RockMatcherNode(Node):
             fig, ax = plt.subplots(figsize=(10, 10))
             ax.invert_xaxis()
 
-
-
             # Calculate the RANSAC map rotation in degrees
             map_yaw_deg = np.degrees(np.arctan2(R[1, 0], R[0, 0]))
 
@@ -433,29 +364,22 @@ class RockMatcherNode(Node):
                 x, y = transformed_local_pts[i]
                 w, l = transformed_local_sizes[i]
                 
-                # The max() prevents Matplotlib from crashing if a rock size is exactly 0
                 disp_w, disp_l = max(w, 0.05), max(l, 0.05)
                 
-                # THE FIX: Use fill=False and edgecolor='orange' to make the ovals visible!
                 ax.add_patch(Ellipse((x, y), width=disp_w, height=disp_l, angle=map_yaw_deg,
                                      fill=False, edgecolor='orange', lw=2, linestyle='--'))
                 
-                # We leave the uniform scatter 'x' here just to mark the exact center!
                 ax.scatter(x, y, c='orange', marker='x', s=5)
 
 
             matches = best_solution.get('matches', [])
             for match in matches:
-                # Your identifier returns a tuple: (global_idx, local_idx, distance)
                 g_idx, l_idx = int(match[0]), int(match[1])
                 
                 gx, gy = global_pts[g_idx]
                 lx, ly = transformed_local_pts[l_idx]
                 
-                # Draw a bright green line connecting the local rock to its global target
                 ax.plot([gx, lx], [gy, ly], color='lime', linewidth=1)
-                
-                # Highlight the chosen global rock with a green square
                 ax.scatter(gx, gy, c='lime', marker='s', s=20, edgecolors='black')
                 
 

@@ -63,7 +63,6 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
             idx_p, idx_q, idx_r = tri_idxs 
             vp, vq, vr = pts[idx_p], pts[idx_q], pts[idx_r]
             
-            # NOTE: Assumes quantized_invariant is defined elsewhere in your file!
             inv = quantized_invariant(vp, vq, vr, binsize=binsize)
             if inv is None:
                 continue
@@ -80,7 +79,7 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
 
             bucket = table.setdefault(inv, [])
             if len(bucket) < max_candidates_per_inv:
-                # --- MODIFICATION 2: Store the sizes alongside the indices! ---
+                # --- Store the sizes alongside the indices! ---
                 if catalog_sizes is not None:
                     # Calculate Area (Width * Length) for each vertex using the canonical order
                     area_i = catalog_sizes[ci][0] * catalog_sizes[ci][1]
@@ -143,7 +142,6 @@ def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, ret
     dists = dists[:, 0]
     idxs = idxs[:, 0]
     
-    # --- THE FIX: Disqualify Size Mismatches! ---
     if obs_sizes is not None and cat_sizes is not None:
         for i in range(len(obs_pts)):
             c_idx = idxs[i]
@@ -153,8 +151,7 @@ def score_transform_with_rms(obs_pts, cat_pts, s, R, t, tree=None, eps=10.0, ret
             
             linear_ratio = np.sqrt(o_area / (c_area + 1e-6))
             if not (1.0 - size_tol*2 < linear_ratio < 1.0 + size_tol):
-                dists[i] = np.inf  # Force RANSAC to throw this match in the trash!
-    # --------------------------------------------
+                dists[i] = np.inf 
 
     inlier_mask, chosen_cat_for_obs, chosen_dists = greedy_unique_matches(dists, idxs, eps)
 
@@ -183,7 +180,7 @@ def invariant_neighbors(inv, radius=1):
 def apply_similarity(pts, s, R, t):
     return (s * (pts @ R.T)) + t
 
-def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, distances_to_rover, tree=None, eps_refine=10.0):
+def refine_similarity(obs_pts, cat_pts, s, R, t, distances_to_rover, tree=None, eps_refine=10.0):
     """
     Refit similarity transform using unique correspondences from the current transform.
     Steps:
@@ -215,9 +212,6 @@ def refine_similarity(obs_pts, cat_pts, inliers_mask, s, R, t, distances_to_rove
     H = A0.T @ B0
     U, _, Vt = np.linalg.svd(H)
     R_new = Vt.T @ U.T
-    # if np.linalg.det(R_new) < 0:
-    #     Vt[-1, :] *= -1
-    #     R_new = Vt.T @ U.T
     t_new = cb - s_new * (R_new @ ca)
 
     return s_new, R_new, t_new
@@ -233,16 +227,9 @@ def estimate_similarity_from_triangle(A, B):
         return None
     s = nb / na
 
-    # Correct Kabsch: H = A0^T B0, U S Vt = svd(H), R = Vt.T @ U.T
     H = A0.T @ B0
     U, _, Vt = np.linalg.svd(H)
     R = Vt.T @ U.T
-
-    # # Ensure proper rotation (det = +1)
-    # if np.linalg.det(R) < 0:
-    #     # fix reflection: flip last column of Vt (equivalently multiply V by diag(1, ..., -1))
-    #     Vt[-1, :] *= -1
-    #     R = Vt.T @ U.T
 
     t = cb - s * (R @ ca)
     return s, R, t
@@ -282,11 +269,11 @@ def quantized_invariant(p, q, r, binsize=0.01):
         return np.arccos(x)
 
 
-    angle_a = safe_arccos(b**2 + c**2 - a**2, 2.0 * b * c) / np.pi  # normalize to [0,1]
+    angle_a = safe_arccos(b**2 + c**2 - a**2, 2.0 * b * c) / np.pi 
     angle_b = safe_arccos(a**2 + c**2 - b**2, 2.0 * a * c) / np.pi
 
     # Area via Heron’s formula (perm-invariant), then normalize by c^2
-    s = 0.5 * (a + b + c)  # semiperimeter
+    s = 0.5 * (a + b + c) 
     area_sq = max(s * (s - a) * (s - b) * (s - c), 0.0)
     area = np.sqrt(area_sq)
     area_norm = area / (c**2 + 1e-12)
@@ -319,9 +306,9 @@ def canonical_triangle_vertex_order(pts3):
         (d_qr, 0),
         (d_rp, 1)
     ]
-    lengths_with_opposite.sort(key=lambda x: x[0])  # ascending a<=b<=c
+    lengths_with_opposite.sort(key=lambda x: x[0]) 
     ordered_vertices = [t[1] for t in lengths_with_opposite]
-    return ordered_vertices  # length 3 list of indices in {0,1,2}
+    return ordered_vertices 
 
 
 def identify_geometric(sim_result, catalog_dict,
@@ -334,15 +321,14 @@ def identify_geometric(sim_result, catalog_dict,
                        min_seed_inliers=5,
                        early_exit_fraction=1.0,
                        size_tolerance=0.5,
-                       prior_pos=None,       # <--- Pass the EKF position!
-                       prior_radius=None):
+                       prior_pos=None):
     
     # 1. Clean Extraction: Trust the dictionary structure
     observed_pts_2d = sim_result['observed_vectors']
-    observed_sizes = sim_result.get('observed_sizes') # May be None
+    observed_sizes = sim_result.get('observed_sizes') 
     
     catalog_pts_2d = catalog_dict['catalog_vectors']
-    catalog_sizes = catalog_dict.get('catalog_sizes') # May be None
+    catalog_sizes = catalog_dict.get('catalog_sizes') 
 
     # 2. Build hash once if missing
     if hash_index is None:
@@ -352,10 +338,9 @@ def identify_geometric(sim_result, catalog_dict,
     num_local_rocks = len(observed_pts_2d)
     cat_tree = KDTree(catalog_pts_2d)
     obs_tree = KDTree(observed_pts_2d)
-    rng = np.random.RandomState() # <-- Added the 42 seed for deterministic debugging!
+    rng = np.random.RandomState() 
 
     best = None
-    # eps_init = max(eps * 3.0, 5.0) # Lowered initial coarse eps
     eps_init = eps * 3
 
     # Pre-calculate all local neighbors ONCE <---
@@ -363,7 +348,6 @@ def identify_geometric(sim_result, catalog_dict,
     _, all_neighbors = obs_tree.query(observed_pts_2d, k=k_search)
         
     # 2. Assign a mathematical weight using the Inverse Square Law.
-    #    (We add 1.0 so a rock at 0.1m doesn't get an infinite/massive weight)
     if prior_pos is not None:
         delta = observed_pts_2d - np.asarray(prior_pos)
     else:
@@ -387,18 +371,13 @@ def identify_geometric(sim_result, catalog_dict,
         
         obs_pts3 = observed_pts_2d[tri_idx]
         
-        # --- THE FIX: O(1) Memoryless Random Sampling ---
-        # Instantly pick 3 unique indices directly from the array length
-        # tri_idx = rng.choice(num_local_rocks, 3, replace=False)
-        # obs_pts3 = observed_pts_2d[tri_idx]
-        
         d1 = np.linalg.norm(obs_pts3[0] - obs_pts3[1])
         d2 = np.linalg.norm(obs_pts3[1] - obs_pts3[2])
         d3 = np.linalg.norm(obs_pts3[2] - obs_pts3[0])
         
         # Skipping Bad Triangles
         lengths = np.array([d1, d2, d3])
-        a, b, c = np.sort(lengths)
+        a, _, c = np.sort(lengths)
 
         # Reject degenerate shapes
         if a / c < 0.2: continue
@@ -448,20 +427,15 @@ def identify_geometric(sim_result, catalog_dict,
             if not est or not (0.8 <= est[0] <= 1.2): continue
             
             s, R, t = est
-            
-            # if prior_pos is not None and prior_radius is not None:
-            #     if np.linalg.norm(t - prior_pos) > prior_radius:
-            #         continue    
-
             # Scoring: Coarse
-            in_cnt_init, inliers_init, _, _, _ = score_transform_with_rms(
+            in_cnt_init, _, _, _, _ = score_transform_with_rms(
                 observed_pts_2d, catalog_pts_2d, s, R, t, cat_tree, eps=eps_init,
                 obs_sizes=observed_sizes, cat_sizes=catalog_sizes, size_tol=size_tolerance)
 
             if in_cnt_init < min_seed_inliers: continue
 
             # Refinement
-            s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, inliers_init, s, R, t, distances_to_rover, cat_tree)
+            s_ref, R_ref, t_ref = refine_similarity(observed_pts_2d, catalog_pts_2d, s, R, t, distances_to_rover, cat_tree)
 
             if not (0.85 < s_ref < 1.15):
                 continue
@@ -475,7 +449,6 @@ def identify_geometric(sim_result, catalog_dict,
             if rms > 0.5: continue
 
             # CONDENSED: Build matches directly from the scoring indices
-            # No need for the extra cat_tree.query here anymore!
             matches = [(assigned_idxs[i], i, dists[i]) for i in np.where(inliers)[0]]
 
             if best is None or (in_cnt > best['inlier_count'] or (in_cnt == best['inlier_count'] and rms < best['rms'])):
