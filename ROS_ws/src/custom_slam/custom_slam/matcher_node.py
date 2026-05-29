@@ -25,7 +25,7 @@ class RockMatcherNode(Node):
         
         
         # --- Parameters ---
-        MY = '2021'
+        MY = 'CNES'
         # self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_42m_sat.csv')
         self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_sat.csv')
         self.global_csv = self.get_parameter('global_map_path').get_parameter_value().string_value
@@ -373,7 +373,7 @@ class RockMatcherNode(Node):
 
         # We are localized! Block any RANSAC hallucinations from being published.
         if phys_dist > 7.0: 
-            # self.get_logger().warn(f"🚫 Matcher Blocked Publish! Jump too large: {phys_dist:.1f}m > 5.0m")
+            self.get_logger().warn(f"🚫 Matcher Blocked Publish! Jump too large: {phys_dist:.1f}m > 5.0m")
             # self.get_logger().warn(f"Current Rover EKF: x:{rover_vec[0]} y:{rover_vec[1]}")
             # self.get_logger().warn(f"Mine: {rover_global_x}, {rover_global_y}")
             return

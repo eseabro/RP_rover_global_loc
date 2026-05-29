@@ -11,3 +11,11 @@ ros2 bag record     /ekf/pose     /ekf/path     /ekf/landmarks     /ground_truth
 python3 /home/ws/src/evaluation/extract_bag_ldm.py     --bag /home/ws/src/rosbags/$NAME     --out /home/ws/results/$NAME/csv
 
 python3 /home/ws/src/evaluation/run_all_2.py     --csv_dir /home/ws/results/$NAME/csv     --out /home/ws/results/$NAME/     --skip_extract
+
+python3 /home/ws/src/evaluation/generate_thesis_table.py \
+    --ekf_csv          /home/ws/results/$NAME/csv/ekf_poses.csv \
+    --odom_csv         /home/ws/results/$NAME/csv/wheel_odom.csv \
+    --gt_csv           /home/ws/results/$NAME/csv/ground_truth.csv \
+    --global_poses_csv /home/ws/results/$NAME/csv/global_poses.csv \
+    --label            "EKF + Matcher" \
+    --out              /home/ws/results/$NAME/table/

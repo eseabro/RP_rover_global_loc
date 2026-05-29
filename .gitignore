@@ -62,7 +62,9 @@ src/hirise_data/Gazebo-*/*
 src/hirise_data/labeled_gazebo/*
 src/hirise_data/rock_sim-*/*
 src/hirise_data/runs/*
-
+ROS_ws/src/custom_slam/models/cnes_marsyard/meshes/serom.stl
+results/*
+results_old/*
 *~
 
 # Emacs
