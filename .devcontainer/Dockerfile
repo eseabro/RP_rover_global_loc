@@ -1,7 +1,7 @@
 # Use the official ROS 2 Humble image as a base
 FROM osrf/ros:jazzy-desktop-full
 
-ARG USERNAME=bernat
+ARG USERNAME=Emma
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
@@ -57,11 +57,6 @@ RUN pip install ultralytics "numpy<2.0" --break-system-packages
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES ${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES ${NVIDIA_DRIVER_CAPABILITIES:+$NVIDIA_DRIVER_CAPABILITIES,}compute,video,graphics,utility
-
-
-
-ENV XDG_RUNTIME_DIR=/tmp/runtime-${USERNAME}
-RUN mkdir -p $XDG_RUNTIME_DIR
 
 
 ENV SHELL=/bin/bash
