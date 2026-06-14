@@ -181,6 +181,7 @@ def main():
     parser.add_argument('--skip_extract', action='store_true')
     parser.add_argument('--rpe_window',   type=float, default=5.0)
     parser.add_argument('--error_threshold', type=float, default=2.0)
+    parser.add_argument('--ekf_no_reloc', default=None, help='Path to the original EKF CSV (without reloc) from another directory')
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -199,6 +200,7 @@ def main():
     odom_csv  = os.path.join(csv_dir, 'wheel_odom.csv')
     global_csv= os.path.join(csv_dir, 'global_poses.csv')
     stats_csv = os.path.join(csv_dir, 'matcher_stats.csv')
+    no_reloc_csv = os.path.join(args.ekf_no_reloc, 'ekf_poses.csv') if args.ekf_no_reloc else None
 
     # 2. SLAM Metrics (with Z-Trajectory)
     if os.path.exists(ekf_csv) and os.path.exists(gt_csv):
@@ -207,6 +209,8 @@ def main():
                '--rpe_window', str(args.rpe_window), '--global_poses', global_csv]
         if os.path.exists(lms_csv): cmd += ['--landmarks', lms_csv]
         if os.path.exists(odom_csv): cmd += ['--odom', odom_csv]
+        if args.ekf_no_reloc:
+            cmd += ['--ekf_no_reloc', no_reloc_csv]
         run(cmd, "Step 2: SLAM metrics and Full 3D Plotting")
 
     # 3. Relocalization Metrics

@@ -329,7 +329,7 @@ def compute_ate(est, gt):
 
 # ─── UPDATED PLOT FUNCTIONS ──────────────────────────────────────────────────
 
-def plot_ate_over_time(ekf_times, ekf_errors, odom_times, odom_errors, out_dir):
+def plot_ate_over_time(ekf_times, ekf_errors, odom_times, odom_errors, out_dir, df_no_reloc=None):
     """Plots both EKF and Odometry ATE for comparison."""
     fig, ax = plt.subplots(figsize=(12, 5))
     
@@ -339,6 +339,12 @@ def plot_ate_over_time(ekf_times, ekf_errors, odom_times, odom_errors, out_dir):
     # Odometry Line (Red dashed)
     if odom_errors is not None:
         ax.plot(odom_times - odom_times[0], odom_errors, 'r--', label='Wheel Odom ATE (2D XY)', alpha=0.7)
+        
+    
+
+        # Inside your plotting block (adjust column names 'x' and 'y' to match your CSV format)
+    if df_no_reloc is not None:
+        ax.plot(df_no_reloc['x'], df_no_reloc['y'], label='EKF (No Reloc)', color='purple', linestyle='--')
 
     ax.set_xlabel('Time [s]')
     ax.set_ylabel('Position Error [m]')
@@ -349,33 +355,35 @@ def plot_ate_over_time(ekf_times, ekf_errors, odom_times, odom_errors, out_dir):
     plt.savefig(os.path.join(out_dir, 'ate_over_time.png'), dpi=150)
     plt.close()
 
-def plot_trajectories(ekf, gt, odom, landmarks, out_dir):
+def plot_trajectories(ekf, gt, odom, landmarks, out_dir, df_no_reloc=None):
     fig, ax = plt.subplots(figsize=(10, 8))
     
     # ══════════════════════════════════════════════════════════════
     # UNIFIED LANDMARK PLOTTING
     # ══════════════════════════════════════════════════════════════
-    if landmarks is not None and not landmarks.empty:
-        # Still group by ID to get the final estimated position of each rock
-        lms = landmarks.sort_values('timestamp').groupby('id').tail(1)
+    # if landmarks is not None and not landmarks.empty:
+    #     # Still group by ID to get the final estimated position of each rock
+    #     lms = landmarks.sort_values('timestamp').groupby('id').tail(1)
         
-        # Plot all rocks using the same style (Orange stars)
-        ax.scatter(lms['x'], lms['y'], 
-                   c='orange', 
-                   s=30, 
-                   marker='*', 
-                   alpha=0.8, 
-                   edgecolors='black', 
-                   linewidths=0.5,
-                   label='Estimated Landmarks',
-                   zorder=3)
+    #     # Plot all rocks using the same style (Orange stars)
+    #     ax.scatter(lms['x'], lms['y'], 
+    #                c='orange', 
+    #                s=30, 
+    #                marker='*', 
+    #                alpha=0.8, 
+    #                edgecolors='black', 
+    #                linewidths=0.5,
+    #                label='Estimated Landmarks',
+    #                zorder=3)
     # ══════════════════════════════════════════════════════════════
+    if df_no_reloc is not None:
+        ax.plot(df_no_reloc['x'], df_no_reloc['y'], label='EKF (No Loc)', color='purple', zorder=2)
     
     ax.plot(gt['x'], gt['y'], 'g-', linewidth=2, label='Ground Truth', zorder=5)
     if odom is not None: 
         ax.plot(odom['x'], odom['y'], 'r--', alpha=0.5, label='Wheel Odom', zorder=4)
     
-    ax.plot(ekf['x'], ekf['y'], 'b-', alpha=0.8, label='EKF Estimate', zorder=6)
+    ax.plot(ekf['x'], ekf['y'], 'b-', alpha=0.8, label='EKF Estimate with Loc', zorder=6)
     
     ax.set_title('Top-Down Trajectory & Landmarks')
     ax.legend()
@@ -462,7 +470,11 @@ def main():
     parser.add_argument('--landmarks', default=None); parser.add_argument('--odom', default=None)
     parser.add_argument('--out', required=True); parser.add_argument('--rpe_window', type=float, default=5.0)
     parser.add_argument('--global_poses', required=True, help='global_poses.csv')
+    parser.add_argument('--ekf_no_reloc', default=None, help='Path to the original EKF CSV (without reloc) from another directory')
     args = parser.parse_args(); os.makedirs(args.out, exist_ok=True)
+    if args.ekf_no_reloc and os.path.exists(args.ekf_no_reloc):
+        # Assuming pandas is used to load your CSVs
+        df_no_reloc = pd.read_csv(args.ekf_no_reloc)
     
     ekf, gt = load_csv(args.ekf), load_csv(args.gt)
     odom = load_csv(args.odom) if args.odom else None
@@ -482,7 +494,7 @@ def main():
         odom_times_aligned = odom_al['timestamp'].values
 
     # Plotting
-    plot_trajectories(ekf_al, gt_al_ekf, odom_al, lms, args.out)
+    plot_trajectories(ekf_al, gt_al_ekf, odom_al, lms, args.out, df_no_reloc=df_no_reloc if args.ekf_no_reloc else None)
     plot_z_trajectory(ekf_al, gt_al_ekf, args.out)
     plot_ate_over_time(ekf_al['timestamp'].values, ate_err_ekf, odom_times_aligned, ate_err_odom, args.out)
     plot_sigma_consistency(ekf_al['timestamp'].values, ekf_al, gt_al_ekf, args.out, relocs)
