@@ -62,8 +62,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         # robot_state_publisher_node, 
         slam_node,
-        matcher,
+        # matcher,
         # odom_path,
-        exporter,
-        rviz_node
+        # exporter,
+        # rviz_node
     ])

@@ -85,7 +85,7 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
                     area_i = catalog_sizes[ci][0] * catalog_sizes[ci][1]
                     area_j = catalog_sizes[cj][0] * catalog_sizes[cj][1]
                     area_k = catalog_sizes[ck][0] * catalog_sizes[ck][1]
-                    
+
                     # Store as a 6-item tuple: (idx1, idx2, idx3, area1, area2, area3)
                     bucket.append((ci, cj, ck, area_i, area_j, area_k))
                 else:
@@ -95,6 +95,7 @@ def build_geometric_hash_fast(catalog_pts_2d, catalog_sizes=None, binsize=0.01, 
     for key in list(table.keys()):
         if len(table[key]) > 50:
             table[key] = table[key][:50]
+            print(f"Truncated bucket to 50 candidates")
             
     return table
 
@@ -235,7 +236,6 @@ def estimate_similarity_from_triangle(A, B):
     return s, R, t
 
 
-# --- Replace quantized_invariant with the full 5-dim descriptor ---
 def quantized_invariant(p, q, r, binsize=0.01):
     """
     Permutation- and scale-invariant triangle descriptor built from sorted side lengths:
@@ -317,7 +317,7 @@ def identify_geometric(sim_result, catalog_dict,
                        binsize=0.01,
                        ransac_iters=4000,
                        inv_neighbor_radius=1,
-                       max_candidates_per_inv=40,
+                       max_candidates_per_inv=80,
                        min_seed_inliers=5,
                        early_exit_fraction=1.0,
                        size_tolerance=0.5,
@@ -344,7 +344,7 @@ def identify_geometric(sim_result, catalog_dict,
     eps_init = eps * 3
 
     # Pre-calculate all local neighbors ONCE <---
-    k_search = min(num_local_rocks, 15)
+    k_search = min(num_local_rocks, 30)
     _, all_neighbors = obs_tree.query(observed_pts_2d, k=k_search)
         
     # 2. Assign a mathematical weight using the Inverse Square Law.
@@ -352,6 +352,7 @@ def identify_geometric(sim_result, catalog_dict,
         delta = observed_pts_2d - np.asarray(prior_pos)
     else:
         delta = observed_pts_2d  # fallback to old (broken) behaviour
+        
     distances_to_rover = np.linalg.norm(delta, axis=1)
     weights = np.exp(-distances_to_rover / 4.0)
     anchor_probs = weights / np.sum(weights)

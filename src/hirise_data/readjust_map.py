@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg    
 
 # --- CONFIGURATION ---
-INPUT_CSV = 'marsyard2022_sat.csv'
-OUTPUT_CSV = 'marsyard2022_sat_adjusted.csv'
-IMAGE_PATH = 'marsyard2022_masks.jpg' # <-- UPDATE THIS with your image file
+INPUT_CSV = 'marsyardCNES_sat.csv'
+OUTPUT_CSV = 'marsyardCNES_sat_adjusted.csv'
+IMAGE_PATH = 'marsyardCNES_masks.jpg' # <-- UPDATE THIS with your image file
 # 1. The Rotation (in degrees)
 # Positive = Counter-Clockwise (Standard ROS ENU)
 # 1. Image & Physical Scale (The New Math!)
@@ -21,13 +21,13 @@ ROTATION_DEG = 90.0
 
 # 2. The Inversion (Flip)
 # Set to -1 if an axis is mirrored 
-FLIP_X = -1 
-FLIP_Y = -1
+FLIP_X = 1 
+FLIP_Y = 1
 
 # 3. The Translation (Shift)
 # How far is the true center of the Mars Yard from the Gazebo (0,0) origin?
-X_OFFSET = 0 #7  # meters
-Y_OFFSET = 0#-40  # meters
+X_OFFSET = -8.712 #7  # meters
+Y_OFFSET = 41.5#-40  # meters
 
 # --- PRE-COMPUTE MATH ---
 theta = math.radians(ROTATION_DEG)

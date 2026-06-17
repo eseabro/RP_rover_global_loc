@@ -4,7 +4,7 @@ This repository holds the code for the research project on Global Localization S
 
 Running evaluation:
 
-export NAME=MY_2020_FINAL
+export NAME=MY_CNES_FINAL_CORRECTED
 
 ros2 bag record     /ekf/pose     /ekf/path     /ekf/landmarks     /ground_truth/odom     /cmd_odom     /rock_global_pose -o $NAME
 

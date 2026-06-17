@@ -26,13 +26,13 @@ class RockMatcherNode(Node):
         
         # --- Parameters ---
         MY = 'CNES'
-        self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_sat.csv')
+        self.declare_parameter('global_map_path', f'/home/ws/src/hirise_data/marsyard{MY}_sat_adjusted.csv')
         self.global_csv = self.get_parameter('global_map_path').get_parameter_value().string_value
 
         # Matcher Settings
-        self.eps = 0.2  # 0.6 for 2021, 0.9 for 2022
+        self.eps = 0.15 # 0.6 for 2021, 0.9 for 2022
         self.binsize = 0.01 # before 0.01
-        self.size_tol = 0.4
+        self.size_tol = 0.5
         
         # --- Load Global Catalog ---
         self.load_global_catalog()
@@ -60,7 +60,7 @@ class RockMatcherNode(Node):
         self.metrics_file_path = os.path.expanduser(f'/home/ws/src/matcher_csvs/MY{MY}.csv')
         file_exists = os.path.exists(self.metrics_file_path)
         
-        self.metrics_file = open(self.metrics_file_path, 'a', newline='')
+        self.metrics_file = open(self.metrics_file_path, 'a+', newline='')
         self.csv_writer = csv.writer(self.metrics_file)
         
         if not file_exists:
@@ -105,7 +105,6 @@ class RockMatcherNode(Node):
             self.global_hash = build_geometric_hash_fast(self.global_pts, self.global_sizes, binsize=self.binsize)
             # --------------------------------------------------------
             
-
             self.get_logger().info(f"Loaded {len(self.global_pts)} rocks from catalog.")
             
         except Exception as e:
@@ -154,28 +153,28 @@ class RockMatcherNode(Node):
 
         if len(local_pts) > 10:
             confidence_radius = 12.0 
-            min_rocks = 30 
+            min_rocks = 3
             max_rocks = 50 
             
             # 1. Calculate physical 2D distance of every rock to the rover
             distances = np.linalg.norm(local_pts - rover_vec, axis=1)
-            
+
             # 2. Sort the indices from closest (0.0m) to furthest
             sorted_idxs = np.argsort(distances)
-            
+
             # 3. Count how many rocks are naturally inside our safe stereo radius
             rocks_in_radius = int(np.sum(distances <= confidence_radius))
-            
+
             # 4. Take the rocks in the radius, OR the minimum required amount
             num_to_keep = max(rocks_in_radius, min_rocks)
-            
+
             # 5. Cap it at max_rocks just in case we hit a massive dense cluster
             num_to_keep = min(num_to_keep, max_rocks)
-            
+
             # 6. Slice the sorted array. If num_to_keep > rocks_in_radius, 
             #    it naturally "spills over" and grabs the closest outside rocks!
             keep_idxs = sorted_idxs[:num_to_keep]
-            
+
             local_pts = local_pts[keep_idxs]
             local_sizes = local_sizes[keep_idxs]
         # ══════════════════════════════════════════════════════════════
@@ -214,7 +213,7 @@ class RockMatcherNode(Node):
             min_seed_inliers=min_inliers,
             early_exit_fraction=0.85,
             size_tolerance=self.size_tol,
-            prior_pos=rover_vec
+            prior_pos=None
         )
         
         ransac_end = time.perf_counter()
@@ -234,7 +233,7 @@ class RockMatcherNode(Node):
         rms = best.get('rms', 0.0)
         
         exit_reason = "EARLY EXIT" if early_exit else "MAX ITERATIONS"
-        self.get_logger().debug(f"📊 DEBUG: RANSAC finished ({exit_reason} at {iters} iters) -> Best Inliers: {inliers}/{len(local_pts)}, Scale: {s:.2f}, RMSE: {rms:.3f}m")
+        self.get_logger().debug(f"📊 DEBUG: RANSAC finished ({exit_reason} at {iters} iters) -> Best Inliers: {inliers}/{len(local_pts)}, Scale: {s:.2f}, RMSE: {rms:.3f}m ")
 
         # =========================================================
         # 3. LOG TO CSV
@@ -282,14 +281,28 @@ class RockMatcherNode(Node):
         # 2. Pure matrix math (Calculates the exact coordinate in the CSV frame)
         pure_global_pos = (s * np.dot(R, rover_vec)) + t
                 
-        rover_global_x = float(pure_global_pos[1])
-        rover_global_y = float(pure_global_pos[0])
+        rover_global_x = -float(pure_global_pos[0])
+        rover_global_y = float(pure_global_pos[1])
 
-        F = np.array([[0, 1], [1, 0]])
-        R_rot = F @ R                         # was R @ F
-        map_yaw = np.arctan2(R_rot[1, 0], R_rot[0, 0])
-        pure_global_yaw = rover_yaw_local + map_yaw
-        rover_global_yaw = (pure_global_yaw + np.pi) % (2*np.pi) - np.pi
+        # F = np.array([[0, 1], [1, 0]])
+        # R_rot = F @ R                         # was R @ F
+        # map_yaw = np.arctan2(R_rot[1, 0], R_rot[0, 0])
+        # pure_global_yaw = rover_yaw_local + map_yaw
+        # rover_global_yaw = (pure_global_yaw + np.pi) % (2*np.pi) - np.pi/2
+        # rover_global_yaw = pure_global_yaw
+        
+        # 1. Create a unit vector pointing in the rover's current local heading
+        v_local = np.array([math.cos(rover_yaw_local), math.sin(rover_yaw_local)])
+        
+        # 2. Rotate the vector using the exact same R matrix from your matcher
+        v_raw = R @ v_local
+        
+        # 3. Apply the exact same X-axis reflection you applied to your position
+        rover_global_dir_x = -float(v_raw[0])
+        rover_global_dir_y = float(v_raw[1])
+        
+        # 4. Read the final angle directly from the transformed vector
+        rover_global_yaw = math.atan2(rover_global_dir_y, rover_global_dir_x)
 
         # ══════════════════════════════════════════════════════════════
         # THE MATCHER GATE
@@ -315,6 +328,11 @@ class RockMatcherNode(Node):
             self.get_logger().warn(f"🚫 Matcher Blocked Publish! Angle jump too large: {math.degrees(dyaw):.1f}°")
             return
 
+        # # If the average error per rock is greater than 40cm, it's likely a hallucination
+        # if rms > 0.40:
+        #     self.get_logger().warn(f"🚫 Matcher Blocked! RMSE too high: {rms:.2f}m > 0.40m")
+        #     return
+        
         # Build the Pose Message
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = stamp
@@ -339,7 +357,7 @@ class RockMatcherNode(Node):
         self.pose_pub.publish(msg)
         self.get_logger().debug(f"📍 EKF Local Pose: X={rover_vec[0]:.2f}, Y={rover_vec[1]:.2f}")
         self.get_logger().debug(f"🌍 Absolute Global Pose: X={rover_global_x:.2f}, Y={rover_global_y:.2f}")
-        self.get_logger().info(f"🌍 Absolute Global Reloc: X={rover_vec[0]:.2f}, Y={rover_vec[1]:.2f}")
+        self.get_logger().info(f"🌍 Absolute Global Reloc: X={rover_vec[0]:.2f}, Y={rover_vec[1]:.2f}, RMS: {rms}, n inliers: {inliers}")
 
     def save_debug_plot(self, global_pts, global_sizes, local_pts, local_sizes, best_solution, rover_local_pos=None):
         """Transforms local rocks and saves an overlay image for debugging."""

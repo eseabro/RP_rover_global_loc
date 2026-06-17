@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 def main():
-    mars_yard = 'MY2021'
+    mars_yard = 'MYCNES'
     csv_path = os.path.expanduser(f'/home/ws/src/matcher_csvs/{mars_yard}.csv')
     
     if not os.path.exists(csv_path):
